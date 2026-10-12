@@ -137,8 +137,15 @@ export const ReportsPage: React.FC = () => {
               <span className="font-semibold text-cyan-400 print:text-blue-600">{summary.algorithm.toUpperCase()}</span>
             </div>
             <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80 print:border-gray-300">
-              <span className="text-slate-500 block text-[10px]">TOTAL FLOWS</span>
-              <span className="font-semibold text-slate-200 print:text-black">{summary.total_rows.toLocaleString()}</span>
+              <span className="text-slate-500 block text-[10px]">ANALYZED FLOWS</span>
+              <span className="font-semibold text-slate-200 print:text-black">
+                {summary.total_rows.toLocaleString()}
+                {summary.is_sampled && (
+                  <span className="text-amber-400 text-[10px] block">
+                    (Sampled from {summary.original_dataset_rows?.toLocaleString()})
+                  </span>
+                )}
+              </span>
             </div>
             <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80 print:border-gray-300">
               <span className="text-slate-500 block text-[10px]">RUNTIME</span>

@@ -2,19 +2,16 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Activity,
-  Cpu,
   Layers,
   Sliders,
   Play,
-  CheckCircle2,
   AlertTriangle,
-  Clock,
-  ShieldAlert,
   HelpCircle,
-  Database
+  TrendingUp,
+  Cpu
 } from 'lucide-react';
 import { api } from '../services/api';
-import { DatasetInfo, ModelInfo, AnalysisJobStatus } from '../types';
+import { DatasetInfo, ModelInfo, AnalysisJobStatus, KDistanceElbowResponse } from '../types';
 
 export const DetectionPage: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -26,10 +23,15 @@ export const DetectionPage: React.FC = () => {
   const [selectedAlgorithm, setSelectedAlgorithm] = useState<string>('isolation_forest');
   const [selectedModelId, setSelectedModelId] = useState<string>('if_with_port');
 
-  // DBSCAN params
+  // DBSCAN mode & params
+  const [dbscanMode, setDbscanMode] = useState<'preset' | 'dataset_tuned'>('preset');
   const [dbscanEps, setDbscanEps] = useState<number>(2.5522);
   const [dbscanMinSamples, setDbscanMinSamples] = useState<number>(10);
   const [sampleLimit, setSampleLimit] = useState<number>(50000);
+
+  // K-distance elbow state
+  const [isCalculatingKDist, setIsCalculatingKDist] = useState(false);
+  const [kDistResult, setKDistResult] = useState<KDistanceElbowResponse | null>(null);
 
   // Job status
   const [activeJob, setActiveJob] = useState<AnalysisJobStatus | null>(null);
@@ -54,6 +56,21 @@ export const DetectionPage: React.FC = () => {
       }
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleComputeKDistance = async () => {
+    if (!selectedDatasetId) return;
+    setIsCalculatingKDist(true);
+    try {
+      const res = await api.getKDistanceCurve(selectedDatasetId, dbscanMinSamples);
+      setKDistResult(res);
+      setDbscanEps(res.suggested_eps);
+    } catch (e: any) {
+      console.error(e);
+      setErrorMsg(e.message || 'Failed to compute k-distance curve');
+    } finally {
+      setIsCalculatingKDist(false);
     }
   };
 
@@ -110,6 +127,8 @@ export const DetectionPage: React.FC = () => {
   };
 
   const selectedDataset = datasets.find((d) => d.id === selectedDatasetId);
+  const rowsToAnalyze = selectedDataset ? Math.min(selectedDataset.row_count, sampleLimit) : sampleLimit;
+  const estimatedDBSCANMemoryMB = ((rowsToAnalyze ** 2 * 4) / (1024 * 1024)).toFixed(1);
 
   return (
     <div className="space-y-8">
@@ -134,7 +153,10 @@ export const DetectionPage: React.FC = () => {
               {datasets.map((ds) => (
                 <div
                   key={ds.id}
-                  onClick={() => setSelectedDatasetId(ds.id)}
+                  onClick={() => {
+                    setSelectedDatasetId(ds.id);
+                    setKDistResult(null);
+                  }}
                   className={`cursor-pointer p-3.5 rounded-lg border text-xs transition-all ${
                     selectedDatasetId === ds.id
                       ? 'bg-cyan-950/20 border-cyan-500 text-slate-100'
@@ -195,7 +217,7 @@ export const DetectionPage: React.FC = () => {
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-400 leading-relaxed">
-                  Density-based spatial clustering. Clusters flows into density groups; non-dense noise points (<code className="text-blue-300">cluster -1</code>) are flagged as anomalies.
+                  Density-based spatial clustering. Groups flows into dense clusters; non-dense noise points (<code className="text-blue-300">cluster -1</code>) are flagged as anomalies.
                 </p>
               </div>
             </div>
@@ -229,8 +251,65 @@ export const DetectionPage: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <div className="p-4 rounded-lg bg-slate-950/50 border border-slate-800/80 space-y-3 text-xs">
-                <div className="text-xs font-semibold text-slate-300">DBSCAN Parameters (Elbow Calibrated):</div>
+              <div className="p-4 rounded-lg bg-slate-950/50 border border-slate-800/80 space-y-4 text-xs">
+                {/* Mode Selector */}
+                <div className="flex items-center space-x-4 border-b border-slate-800 pb-3">
+                  <span className="text-slate-300 font-semibold text-[11px]">DBSCAN Mode:</span>
+                  <label className="flex items-center space-x-1.5 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="db_mode"
+                      checked={dbscanMode === 'preset'}
+                      onChange={() => {
+                        setDbscanMode('preset');
+                        setDbscanEps(2.5522);
+                        setDbscanMinSamples(10);
+                      }}
+                      className="text-blue-500"
+                    />
+                    <span className="text-slate-200">Mode A: Research Baseline Preset (eps=2.552, min_samples=10)</span>
+                  </label>
+                  <label className="flex items-center space-x-1.5 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="db_mode"
+                      checked={dbscanMode === 'dataset_tuned'}
+                      onChange={() => setDbscanMode('dataset_tuned')}
+                      className="text-blue-500"
+                    />
+                    <span className="text-slate-200">Mode B: Dataset-Tuned Calibration</span>
+                  </label>
+                </div>
+
+                {dbscanMode === 'preset' ? (
+                  <div className="p-3 rounded bg-blue-950/30 border border-blue-900/40 text-[11px] text-blue-200 space-y-1">
+                    <div className="font-semibold text-blue-300">Methodological Note:</div>
+                    <p>
+                      These parameters originate from the CIC-IDS2017 research experiment (Phase 2B) and are reproduced here for direct benchmark alignment. They may not be optimal for different arbitrary uploaded distributions.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-300 text-[11px] font-semibold">Unsupervised K-Distance Curve Analysis:</span>
+                      <button
+                        onClick={handleComputeKDistance}
+                        disabled={isCalculatingKDist}
+                        className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white font-mono text-[10px] disabled:opacity-50"
+                      >
+                        {isCalculatingKDist ? 'Computing Nearest Neighbors...' : 'Calibrate Eps from Data (k-dist)'}
+                      </button>
+                    </div>
+
+                    {kDistResult && (
+                      <div className="p-3 rounded bg-slate-900 border border-slate-800 text-[11px] text-slate-300 space-y-1">
+                        <div>Recommended Epsilon: <strong className="text-cyan-400 font-mono">{kDistResult.suggested_eps}</strong> (90th percentile of k-nearest neighbor distance)</div>
+                        <div className="text-slate-500 text-[10px]">Evaluated on representative sample of {kDistResult.sample_size} flows with k={kDistResult.k}.</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="text-[11px] text-slate-400 block mb-1">Epsilon (eps):</label>
@@ -263,9 +342,16 @@ export const DetectionPage: React.FC = () => {
                     />
                   </div>
                 </div>
-                <p className="text-[10px] text-slate-500">
-                  DBSCAN requires pairwise distance computation. Datasets over {sampleLimit.toLocaleString()} rows are uniformly sampled (seed 42) with explicit notice.
-                </p>
+
+                {/* Resource Estimation Warning */}
+                <div className="p-3 rounded bg-slate-950 border border-slate-800/80 text-[11px] text-slate-400 flex items-center justify-between">
+                  <div>
+                    Estimated Pairwise Distance Memory: <span className="font-mono text-amber-400 font-bold">{estimatedDBSCANMemoryMB} MB</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500">
+                    Safe for standard laptop RAM
+                  </div>
+                </div>
               </div>
             )}
           </div>

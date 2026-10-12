@@ -49,6 +49,12 @@ export const api = {
     return res.json();
   },
 
+  async getKDistanceCurve(datasetId: string, k = 10): Promise<import('../types').KDistanceElbowResponse> {
+    const res = await fetch(`${API_BASE}/datasets/${datasetId}/k-distance?k=${k}`);
+    if (!res.ok) throw new Error('Failed to compute k-distance curve');
+    return res.json();
+  },
+
   // Models
   async getModels(): Promise<ModelInfo[]> {
     const res = await fetch(`${API_BASE}/models`);

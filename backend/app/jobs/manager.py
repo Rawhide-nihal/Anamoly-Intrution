@@ -16,6 +16,24 @@ from ..schemas.base import AnalysisJobStatus, AnalysisResultSummary
 class JobManager:
     def __init__(self):
         self._lock = threading.Lock()
+        self._cleanup_interrupted_jobs()
+
+    def _cleanup_interrupted_jobs(self):
+        """
+        On server startup, mark any previously 'running' or 'validating' jobs as 'interrupted'.
+        """
+        try:
+            with get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    UPDATE jobs
+                    SET status = 'failed', current_stage = 'Interrupted by server restart',
+                        error_message = 'Process terminated unexpectedly during server lifecycle restart.'
+                    WHERE status IN ('queued', 'validating', 'preparing_data', 'running_analysis', 'generating_output')
+                """)
+                conn.commit()
+        except Exception as e:
+            print("Failed to clean up interrupted jobs:", e)
 
     def create_job(self, dataset_id: str, model_id: str, algorithm: str, params: Dict[str, Any]) -> str:
         job_id = str(uuid.uuid4())
@@ -71,7 +89,7 @@ class JobManager:
                 cursor.execute("SELECT * FROM datasets WHERE id = ?", (dataset_id,))
                 d_row = cursor.fetchone()
             if not d_row:
-                raise ValueError("Dataset not found")
+                raise ValueError("Dataset not found in storage")
 
             filepath = d_row["filepath"]
             filename = d_row["filename"]
@@ -79,28 +97,29 @@ class JobManager:
             df.columns = [str(c).strip() for c in df.columns]
 
             has_labels = "Label" in df.columns
-            ground_truth_labels = None
+            ground_truth_labels_series = None
             if has_labels:
-                ground_truth_labels = df["Label"].str.replace("", "-", regex=False).str.replace(r"\s+", " ", regex=True).str.strip()
+                ground_truth_labels_series = df["Label"].astype(str).str.replace("", "-", regex=False).str.replace(r"\s+", " ", regex=True).str.strip()
 
-            self.update_job_status(job_id, "preparing_data", 30, "Preparing data and transformations")
+            self.update_job_status(job_id, "preparing_data", 30, "Preparing data tensors and transformations")
 
-            total_rows = len(df)
             scores = None
             cluster_labels = None
             cluster_stats = None
 
             if algorithm == "isolation_forest":
                 self.update_job_status(job_id, "running_analysis", 60, "Executing Isolation Forest scoring")
-                preds, scores = ml_service.run_isolation_forest_inference(df, model_id=model_id)
+                preds, scores, source_indices = ml_service.run_isolation_forest_inference(df, model_id=model_id)
+                actual_analyzed_rows = len(preds)
             elif algorithm == "dbscan":
                 self.update_job_status(job_id, "running_analysis", 60, "Performing transductive DBSCAN density clustering")
-                eps = params.get("dbscan_eps", 2.5522)
-                min_samples = params.get("dbscan_min_samples", 10)
-                sample_limit = params.get("sample_limit", 50000)
-                preds, cluster_labels, cluster_stats = ml_service.run_dbscan_clustering(df, eps=eps, min_samples=min_samples, sample_limit=sample_limit)
-                if cluster_stats["is_sampled"]:
-                    total_rows = cluster_stats["sample_size"]
+                eps = float(params.get("dbscan_eps", 2.5522))
+                min_samples = int(params.get("dbscan_min_samples", 10))
+                sample_limit = int(params.get("sample_limit", 50000))
+                preds, cluster_labels, source_indices, cluster_stats = ml_service.run_dbscan_clustering(
+                    df, eps=eps, min_samples=min_samples, sample_limit=sample_limit
+                )
+                actual_analyzed_rows = len(preds)
             else:
                 raise ValueError(f"Unsupported algorithm: {algorithm}")
 
@@ -109,14 +128,17 @@ class JobManager:
             # Calculate predictions and metrics
             normal_count = int(np.sum(preds == 0))
             anomaly_count = int(np.sum(preds == 1))
-            anomaly_percentage = float(anomaly_count / total_rows * 100) if total_rows > 0 else 0.0
+            anomaly_percentage = float(anomaly_count / actual_analyzed_rows * 100) if actual_analyzed_rows > 0 else 0.0
 
             metrics = None
             category_flag_rates = None
 
-            if has_labels and ground_truth_labels is not None:
-                # If DBSCAN sampled, slice labels
-                y_true_binary = (ground_truth_labels[:total_rows] != "BENIGN").astype(np.int8).to_numpy()
+            # EXACT ROW ALIGNMENT FOR GROUND TRUTH EVALUATION:
+            # Match strictly against ground_truth_labels_series.iloc[source_indices]
+            if has_labels and ground_truth_labels_series is not None:
+                aligned_labels = ground_truth_labels_series.iloc[source_indices].to_numpy()
+                y_true_binary = (aligned_labels != "BENIGN").astype(np.int8)
+
                 tp = int(np.sum((y_true_binary == 1) & (preds == 1)))
                 tn = int(np.sum((y_true_binary == 0) & (preds == 0)))
                 fp = int(np.sum((y_true_binary == 0) & (preds == 1)))
@@ -132,7 +154,8 @@ class JobManager:
                     r = pd.Series(scores).rank(method="average").to_numpy()
                     n1 = int((y_true_binary == 1).sum())
                     n0 = len(y_true_binary) - n1
-                    roc_auc_val = float((r[y_true_binary == 1].sum() - n1 * (n1 + 1) / 2) / (n1 * n0))
+                    if n1 > 0 and n0 > 0:
+                        roc_auc_val = float((r[y_true_binary == 1].sum() - n1 * (n1 + 1) / 2) / (n1 * n0))
 
                 metrics = {
                     "TP": tp, "TN": tn, "FP": fp, "FN": fn,
@@ -140,12 +163,11 @@ class JobManager:
                     "fpr": fpr, "fnr": fnr, "roc_auc": roc_auc_val
                 }
 
-                # Category breakdown
+                # Attack category breakdown aligned with source_indices
                 cat_rates = {}
-                labels_slice = ground_truth_labels[:total_rows]
-                for cat in labels_slice.unique():
+                for cat in np.unique(aligned_labels):
                     if cat != "BENIGN":
-                        mask = (labels_slice == cat).to_numpy()
+                        mask = (aligned_labels == cat)
                         flagged = int(np.sum(preds[mask] == 1))
                         total_c = int(np.sum(mask))
                         cat_rates[cat] = {
@@ -157,7 +179,7 @@ class JobManager:
 
             # Score distribution histogram for IF
             score_dist = None
-            if scores is not None:
+            if scores is not None and len(scores) > 0:
                 hist, bin_edges = np.histogram(scores, bins=20)
                 score_dist = {
                     "counts": [int(x) for x in hist],
@@ -171,7 +193,10 @@ class JobManager:
                 "dataset_name": filename,
                 "algorithm": algorithm,
                 "model_name": model_id,
-                "total_rows": total_rows,
+                "total_rows": actual_analyzed_rows,
+                "original_dataset_rows": len(df),
+                "is_sampled": bool(cluster_stats.get("is_sampled")) if cluster_stats else False,
+                "sampling_info": cluster_stats.get("sampling_method") if cluster_stats else None,
                 "normal_count": normal_count,
                 "anomaly_count": anomaly_count,
                 "anomaly_percentage": anomaly_percentage,
@@ -184,11 +209,11 @@ class JobManager:
                 "is_historical_benchmark": False
             }
 
-            # Persist per-row predictions to disk for efficient paginated retrieval
+            # Persist per-row predictions to disk with exact source_indices
             out_file = JOBS_DATA_DIR / f"{job_id}_results.npz"
             save_dict = {
                 "preds": preds,
-                "row_indices": np.arange(total_rows)
+                "source_indices": source_indices
             }
             if scores is not None:
                 save_dict["scores"] = scores

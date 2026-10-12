@@ -65,6 +65,9 @@ export interface AnalysisResultSummary {
   algorithm: string;
   model_name: string;
   total_rows: number;
+  original_dataset_rows?: number;
+  is_sampled?: boolean;
+  sampling_info?: string;
   normal_count: number;
   anomaly_count: number;
   anomaly_percentage: number;
@@ -88,10 +91,13 @@ export interface AnalysisResultSummary {
     noise_count: number;
     noise_percentage: number;
     is_sampled: boolean;
+    sampling_method: string;
+    sampling_seed?: number;
     sample_size: number;
     original_size: number;
     eps: number;
     min_samples: number;
+    estimated_distance_matrix_mb?: number;
     cluster_sizes: Record<string, number>;
   };
   score_distribution?: {
@@ -119,6 +125,8 @@ export interface PaginatedPredictions {
   total_pages: number;
   filter_type: string;
   rows: PredictionRow[];
+  is_sampled?: boolean;
+  original_dataset_rows?: number;
 }
 
 export interface ResearchStatus {
@@ -128,4 +136,11 @@ export interface ResearchStatus {
   found_files: string[];
   missing_files: string[];
   message: string;
+}
+
+export interface KDistanceElbowResponse {
+  suggested_eps: number;
+  k: number;
+  curve: Array<{ index: number; distance: number }>;
+  sample_size: number;
 }

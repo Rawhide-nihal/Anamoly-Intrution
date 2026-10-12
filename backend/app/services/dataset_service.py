@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 import json
 import shutil
@@ -16,7 +17,6 @@ class DatasetService:
         self._seed_sample_datasets()
 
     def _seed_sample_datasets(self):
-        # Register the sample dataset created if it exists
         sample_file = SAMPLE_DATA_DIR / "sample_traffic_cicids2017.csv"
         if sample_file.exists():
             with get_connection() as conn:
@@ -24,7 +24,7 @@ class DatasetService:
                 cursor.execute("SELECT id FROM datasets WHERE id = 'sample_cicids2017'")
                 if not cursor.fetchone():
                     df = pd.read_csv(sample_file)
-                    cols = list(df.columns)
+                    cols = [str(c).strip() for c in df.columns]
                     has_labels = "Label" in cols
                     dist = df["Label"].value_counts().to_dict() if has_labels else None
                     now = datetime.utcnow().isoformat()
@@ -71,42 +71,99 @@ class DatasetService:
                 return d
         return None
 
-    def save_upload(self, file_bytes: bytes, filename: str) -> str:
+    def save_upload_stream(self, upload_file, max_bytes: int = 200 * 1024 * 1024) -> str:
+        """
+        Streams file to disk in 1MB chunks with strict size limits and sanitization.
+        """
+        raw_name = Path(upload_file.filename).name
+        # Sanitize filename
+        safe_name = re.sub(r"[^a-zA-Z0-9_.-]", "_", raw_name)
+        if not safe_name.lower().endswith(".csv"):
+            raise ValueError("Only CSV files are supported.")
+
         dataset_id = str(uuid.uuid4())
-        safe_filename = Path(filename).name
-        target_path = UPLOADS_DIR / f"{dataset_id}_{safe_filename}"
-        with open(target_path, "wb") as f:
-            f.write(file_bytes)
+        target_path = UPLOADS_DIR / f"{dataset_id}_{safe_name}"
 
-        # Inspect basic schema
-        df = pd.read_csv(target_path)
-        cols = [str(c).strip() for c in df.columns]
-        df.columns = cols
-        has_labels = "Label" in cols
-        dist = df["Label"].value_counts().to_dict() if has_labels else None
-        now = datetime.utcnow().isoformat()
+        total_bytes = 0
+        chunk_size = 1024 * 1024 # 1MB chunks
 
-        with get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO datasets (id, filename, filepath, size_bytes, row_count, column_count, columns_json, has_labels, label_distribution_json, created_at, is_sample)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                dataset_id,
-                safe_filename,
-                str(target_path),
-                len(file_bytes),
-                len(df),
-                len(cols),
-                json.dumps(cols),
-                has_labels,
-                json.dumps(dist) if dist else None,
-                now,
-                0
-            ))
-            conn.commit()
+        try:
+            with open(target_path, "wb") as f_out:
+                while True:
+                    chunk = upload_file.file.read(chunk_size)
+                    if not chunk:
+                        break
+                    total_bytes += len(chunk)
+                    if total_bytes > max_bytes:
+                        raise ValueError(f"Uploaded file exceeds maximum limit of {max_bytes // (1024*1024)}MB.")
+                    f_out.write(chunk)
 
-        return dataset_id
+            if total_bytes == 0:
+                raise ValueError("Uploaded file is completely empty (0 bytes).")
+
+            # Validate CSV structure & read headers with sample
+            try:
+                df_sample = pd.read_csv(target_path, nrows=5)
+            except Exception as e:
+                raise ValueError(f"Invalid or corrupted CSV format: {str(e)}")
+
+            if df_sample.empty and total_bytes > 0:
+                raise ValueError("CSV contains no tabular data rows.")
+
+            cols = [str(c).strip() for c in df_sample.columns]
+            if len(cols) == 0:
+                raise ValueError("CSV has no recognized column headers.")
+
+            # Fast row counting without reading entire table into memory
+            row_count = 0
+            with open(target_path, "r", encoding="utf-8", errors="replace") as f_count:
+                for line in f_count:
+                    if line.strip():
+                        row_count += 1
+            # Exclude header
+            total_rows = max(0, row_count - 1)
+
+            # Check if Label column exists
+            has_labels = "Label" in cols
+            dist = None
+            if has_labels:
+                try:
+                    df_labels = pd.read_csv(target_path, usecols=["Label"])
+                    dist = df_labels["Label"].astype(str).value_counts().to_dict()
+                except Exception:
+                    dist = None
+
+            now = datetime.utcnow().isoformat()
+            with get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO datasets (id, filename, filepath, size_bytes, row_count, column_count, columns_json, has_labels, label_distribution_json, created_at, is_sample)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    dataset_id,
+                    safe_name,
+                    str(target_path),
+                    total_bytes,
+                    total_rows,
+                    len(cols),
+                    json.dumps(cols),
+                    has_labels,
+                    json.dumps(dist) if dist else None,
+                    now,
+                    0
+                ))
+                conn.commit()
+
+            return dataset_id
+
+        except Exception as e:
+            # Clean up partial or failed file on disk
+            if target_path.exists():
+                try:
+                    target_path.unlink()
+                except Exception:
+                    pass
+            raise e
 
     def validate_dataset(self, dataset_id: str) -> ValidationReport:
         ds = self.get_dataset(dataset_id)
@@ -129,7 +186,6 @@ class DatasetService:
         expected_without_port = set(expected_data["without_port"])
 
         current_cols_set = set(cols)
-        # Check matching features
         matching_with_port = list(expected_with_port.intersection(current_cols_set))
         missing_with_port = list(expected_with_port - current_cols_set)
 
@@ -146,7 +202,7 @@ class DatasetService:
         dup_count = int(df.duplicated().sum())
 
         has_labels = "Label" in cols
-        labels_list = list(df["Label"].unique()) if has_labels else None
+        labels_list = list(df["Label"].astype(str).unique()) if has_labels else None
 
         compatible_models = []
         if len(missing_with_port) == 0:
@@ -192,11 +248,10 @@ class DatasetService:
         if not ds:
             raise ValueError(f"Dataset {dataset_id} not found")
         df = pd.read_csv(ds["filepath"], nrows=limit)
-        # Clean inf/nan for JSON serialization
         df = df.replace([np.inf, -np.inf], None)
         df = df.where(pd.notnull(df), None)
         return {
-            "columns": list(df.columns),
+            "columns": [str(c).strip() for c in df.columns],
             "rows": df.to_dict(orient="records"),
             "total_rows": ds["row_count"],
             "preview_count": len(df)

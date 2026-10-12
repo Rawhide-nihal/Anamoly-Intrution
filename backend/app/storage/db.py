@@ -1,16 +1,24 @@
 import sqlite3
 import json
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from ..config import DB_PATH
 
-def get_connection():
-    conn = sqlite3.connect(str(DB_PATH))
+@contextmanager
+def get_db():
+    conn = sqlite3.connect(str(DB_PATH), timeout=20.0)
     conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+# For backwards compatibility with existing call sites
+get_connection = get_db
 
 def init_db():
-    with get_connection() as conn:
+    with get_db() as conn:
         cursor = conn.cursor()
         # Datasets table
         cursor.execute("""

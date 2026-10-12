@@ -140,7 +140,12 @@ export const ResultsPage: React.FC = () => {
                 {resultsSummary.dataset_name}
               </div>
               <div className="text-[11px] text-slate-500">
-                {resultsSummary.total_rows.toLocaleString()} flows processed
+                {resultsSummary.total_rows.toLocaleString()} flows analyzed
+                {resultsSummary.is_sampled && (
+                  <span className="text-amber-400 ml-1">
+                    (Sampled from {resultsSummary.original_dataset_rows?.toLocaleString()} rows)
+                  </span>
+                )}
               </div>
             </div>
 
@@ -282,7 +287,7 @@ export const ResultsPage: React.FC = () => {
                   <table className="w-full text-left text-xs border-collapse font-mono">
                     <thead className="bg-slate-900 border-b border-slate-800 text-slate-400 text-[11px]">
                       <tr>
-                        <th className="py-2.5 px-3">Row #</th>
+                        <th className="py-2.5 px-3">Source Dataset Row #</th>
                         <th className="py-2.5 px-3">Prediction</th>
                         {resultsSummary.algorithm === 'isolation_forest' && (
                           <th className="py-2.5 px-3">Anomaly Score (-df)</th>

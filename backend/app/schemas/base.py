@@ -49,11 +49,11 @@ class ModelInfo(BaseModel):
 class AnalysisJobCreate(BaseModel):
     dataset_id: str
     model_id: str
-    algorithm: str # "isolation_forest" or "dbscan"
+    algorithm: str = Field(..., pattern="^(isolation_forest|dbscan)$")
     # DBSCAN parameters (if applicable)
-    dbscan_eps: Optional[float] = 2.5522
-    dbscan_min_samples: Optional[int] = 10
-    sample_limit: Optional[int] = 50000
+    dbscan_eps: Optional[float] = Field(2.5522, ge=0.01, le=100.0)
+    dbscan_min_samples: Optional[int] = Field(10, ge=2, le=500)
+    sample_limit: Optional[int] = Field(50000, ge=10, le=100000)
 
 class AnalysisJobStatus(BaseModel):
     job_id: str
@@ -74,6 +74,9 @@ class AnalysisResultSummary(BaseModel):
     algorithm: str
     model_name: str
     total_rows: int
+    original_dataset_rows: Optional[int] = None
+    is_sampled: Optional[bool] = False
+    sampling_info: Optional[str] = None
     normal_count: int
     anomaly_count: int
     anomaly_percentage: float
@@ -86,7 +89,7 @@ class AnalysisResultSummary(BaseModel):
     is_historical_benchmark: bool = False
 
 class PredictionRow(BaseModel):
-    row_index: int
+    row_index: int # original dataset index
     prediction: int # 0: Normal, 1: Anomaly / Noise
     prediction_label: str # "Normal" or "Anomaly"
     score: Optional[float] = None # For IF: -decision_function
@@ -102,3 +105,5 @@ class PaginatedPredictions(BaseModel):
     total_pages: int
     filter_type: str # "all", "normal", "anomaly"
     rows: List[PredictionRow]
+    is_sampled: Optional[bool] = False
+    original_dataset_rows: Optional[int] = None
