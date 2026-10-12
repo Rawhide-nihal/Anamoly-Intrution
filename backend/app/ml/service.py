@@ -149,7 +149,9 @@ class MLService:
 
     def compute_k_distance_elbow(self, df: pd.DataFrame, k: int = 10, sample_size: int = 2000) -> Dict[str, Any]:
         """
-        Computes k-distance curve on a representative sample to estimate eps.
+        Computes k-distance curve and locates the elbow using the exact Kneedle algorithm
+        (Satopaa et al., 2011 on log10 and linear sorted k-distance curves), exactly matching
+        the unsupervised methodology documented in scripts/phase2b.py.
         """
         from sklearn.neighbors import NearestNeighbors
         from sklearn.impute import SimpleImputer
@@ -179,8 +181,28 @@ class MLService:
         distances, _ = nn.kneighbors(X_scaled)
         k_distances = np.sort(distances[:, -1])
 
-        # Suggested eps at ~90th percentile of k-distance
-        suggested_eps = float(np.percentile(k_distances, 90))
+        # Exact Kneedle implementation from scripts/phase2b.py
+        def _kneedle(y_sorted: np.ndarray) -> Tuple[int, float]:
+            n = len(y_sorted)
+            if n < 2:
+                return 0, float(y_sorted[0])
+            x = np.arange(n) / (n - 1)
+            denom = y_sorted[-1] - y_sorted[0]
+            yn = (y_sorted - y_sorted[0]) / (denom if denom > 1e-12 else 1.0)
+            diff = x - yn
+            idx = int(np.argmax(diff))
+            return idx, float(y_sorted[idx])
+
+        # Primary rule: Kneedle on log10 scale
+        log_kd = np.log10(np.maximum(k_distances, 1e-6))
+        knee_idx_log, knee_val_log = _kneedle(log_kd)
+        eps_log10_kneedle = float(10 ** knee_val_log)
+        pct_log10 = float(knee_idx_log / (len(k_distances) - 1))
+
+        # Secondary rule: Linear scale
+        knee_idx_lin, knee_val_lin = _kneedle(k_distances)
+        eps_linear_kneedle = float(knee_val_lin)
+        pct_linear = float(knee_idx_lin / (len(k_distances) - 1))
 
         # Sample 50 points along the curve for visualization
         step = max(1, len(k_distances) // 50)
@@ -190,7 +212,12 @@ class MLService:
         ]
 
         return {
-            "suggested_eps": round(suggested_eps, 4),
+            "suggested_eps": round(eps_log10_kneedle, 4),
+            "log10_kneedle_eps": round(eps_log10_kneedle, 4),
+            "log10_percentile": round(pct_log10 * 100, 2),
+            "linear_kneedle_eps": round(eps_linear_kneedle, 4),
+            "linear_percentile": round(pct_linear * 100, 2),
+            "methodology": "Kneedle on log10 sorted k-distance curve (Satopaa et al., 2011, matching phase2b.py)",
             "k": k_val,
             "curve": sampled_curve,
             "sample_size": eval_size

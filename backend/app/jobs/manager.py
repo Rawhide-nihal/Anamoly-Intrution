@@ -1,7 +1,9 @@
 import json
 import uuid
 import time
+import gc
 import threading
+from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 import numpy as np
 from datetime import datetime
@@ -14,8 +16,10 @@ from ..ml.service import ml_service
 from ..schemas.base import AnalysisJobStatus, AnalysisResultSummary
 
 class JobManager:
-    def __init__(self):
+    def __init__(self, max_workers: int = 2):
         self._lock = threading.Lock()
+        # Bounded worker pool: prevents unlimited concurrent jobs from exhausting laptop RAM/CPU
+        self._executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="ids_worker")
         self._cleanup_interrupted_jobs()
 
     def _cleanup_interrupted_jobs(self):
@@ -43,12 +47,11 @@ class JobManager:
             cursor.execute("""
                 INSERT INTO jobs (job_id, status, progress, current_stage, dataset_id, model_id, algorithm, params_json, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (job_id, "queued", 0, "Queued", dataset_id, model_id, algorithm, json.dumps(params), now))
+            """, (job_id, "queued", 0, "Queued in worker pool", dataset_id, model_id, algorithm, json.dumps(params), now))
             conn.commit()
 
-        # Start execution in background thread
-        thread = threading.Thread(target=self._run_job_worker, args=(job_id, dataset_id, model_id, algorithm, params), daemon=True)
-        thread.start()
+        # Submit task to bounded worker queue
+        self._executor.submit(self._run_job_worker, job_id, dataset_id, model_id, algorithm, params)
         return job_id
 
     def update_job_status(self, job_id: str, status: str, progress: int, stage: str, error_msg: Optional[str] = None):
@@ -78,6 +81,183 @@ class JobManager:
             rows = cursor.fetchall()
             return [dict(r) for r in rows]
 
+    # --- Training / Reproduction Jobs ---
+    def create_training_job(self, dataset_id: str, variant: str, params: Dict[str, Any]) -> str:
+        job_id = str(uuid.uuid4())
+        now = datetime.utcnow().isoformat()
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO training_jobs (job_id, status, progress, current_stage, dataset_id, variant, params_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (job_id, "queued", 0, "Queued in worker pool", dataset_id, variant, json.dumps(params), now))
+            conn.commit()
+
+        self._executor.submit(self._run_training_worker, job_id, dataset_id, variant, params)
+        return job_id
+
+    def update_training_job_status(self, job_id: str, status: str, progress: int, stage: str, error_msg: Optional[str] = None):
+        with self._lock:
+            with get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    UPDATE training_jobs
+                    SET status = ?, progress = ?, current_stage = ?, error_message = ?
+                    WHERE job_id = ?
+                """, (status, progress, stage, error_msg, job_id))
+                conn.commit()
+
+    def get_training_job(self, job_id: str) -> Optional[Dict[str, Any]]:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM training_jobs WHERE job_id = ?", (job_id,))
+            row = cursor.fetchone()
+            if row:
+                d = dict(row)
+                if d.get("evaluation_metrics_json"):
+                    d["evaluation_metrics"] = json.loads(d["evaluation_metrics_json"])
+                return d
+        return None
+
+    def list_training_jobs(self) -> list:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM training_jobs ORDER BY created_at DESC LIMIT 30")
+            rows = cursor.fetchall()
+            out = []
+            for r in rows:
+                d = dict(r)
+                if d.get("evaluation_metrics_json"):
+                    d["evaluation_metrics"] = json.loads(d["evaluation_metrics_json"])
+                out.append(d)
+            return out
+
+    def _run_training_worker(self, job_id: str, dataset_id: str, variant: str, params: Dict[str, Any]):
+        t0 = time.time()
+        try:
+            from sklearn.ensemble import IsolationForest
+            from sklearn.impute import SimpleImputer
+            from sklearn.preprocessing import StandardScaler
+            import joblib
+
+            self.update_training_job_status(job_id, "running", 10, "Loading and validating training dataset")
+
+            with get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM datasets WHERE id = ?", (dataset_id,))
+                d_row = cursor.fetchone()
+            if not d_row:
+                raise ValueError("Dataset not found in storage")
+
+            filepath = d_row["filepath"]
+            df = pd.read_csv(filepath, low_memory=True)
+            df.columns = [str(c).strip() for c in df.columns]
+
+            # Determine feature list
+            feat_path = ml_service.feature_lists
+            features = feat_path.get(variant, [])
+            if not features:
+                # Fallback to current numeric features if not loaded
+                num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+                features = [c for c in num_cols if c not in ZERO_VARIANCE_DROPPED and c != "Label"]
+                if variant == "without_port" and "Destination Port" in features:
+                    features.remove("Destination Port")
+
+            missing_feats = [f for f in features if f not in df.columns]
+            if missing_feats:
+                raise ValueError(f"Dataset lacks {len(missing_feats)} features required for {variant}: {missing_feats[:5]}")
+
+            self.update_training_job_status(job_id, "running", 25, "Filtering benign baseline flows (unsupervised training)")
+
+            # Academic protocol: train exclusively on BENIGN flows if labels exist
+            if "Label" in df.columns:
+                benign_mask = df["Label"].astype(str).str.upper().str.contains("BENIGN")
+                df_train = df[benign_mask].copy()
+                if len(df_train) == 0:
+                    df_train = df.copy() # fallback if label naming differs
+            else:
+                df_train = df.copy()
+
+            train_rows = len(df_train)
+            X = df_train[features].copy()
+            X = X.replace([np.inf, -np.inf], np.nan)
+
+            self.update_training_job_status(job_id, "running", 45, "Fitting Median Imputer & Standard Scaler")
+            imputer = SimpleImputer(strategy="median")
+            X_imp = imputer.fit_transform(X)
+
+            scaler = StandardScaler()
+            X_scaled = scaler.fit_transform(X_imp).astype(np.float32)
+
+            self.update_training_job_status(job_id, "running", 60, f"Training Isolation Forest ({params.get('n_estimators', 200)} trees)")
+            n_estimators = int(params.get("n_estimators", 200))
+            contamination = float(params.get("contamination", 0.01))
+            random_state = int(params.get("random_state", 42))
+
+            clf = IsolationForest(
+                n_estimators=n_estimators,
+                contamination=contamination,
+                random_state=random_state,
+                n_jobs=-1
+            )
+            clf.fit(X_scaled)
+
+            self.update_training_job_status(job_id, "running", 85, "Evaluating trained model & saving artifacts")
+
+            # Score training set
+            raw_scores = -clf.decision_function(X_scaled)
+            pred_flags = (raw_scores > 0).astype(int)
+            flagged_count = int(pred_flags.sum())
+
+            eval_metrics = {
+                "training_rows": train_rows,
+                "feature_count": len(features),
+                "features_used": features,
+                "n_estimators": n_estimators,
+                "contamination": contamination,
+                "random_state": random_state,
+                "internal_flagged_count": flagged_count,
+                "internal_anomaly_rate": round(float(flagged_count / train_rows * 100), 2) if train_rows > 0 else 0,
+                "mean_anomaly_score": round(float(np.mean(raw_scores)), 4),
+                "max_anomaly_score": round(float(np.max(raw_scores)), 4),
+                "min_anomaly_score": round(float(np.min(raw_scores)), 4)
+            }
+
+            # Save in isolated reproduction folder (NEVER overwriting original frozen research models)
+            repro_dir = JOBS_DATA_DIR / "reproduced_models" / job_id[:8]
+            repro_dir.mkdir(parents=True, exist_ok=True)
+            model_path = repro_dir / f"if_{variant}.joblib"
+            imputer_path = repro_dir / f"imputer_{variant}.joblib"
+            scaler_path = repro_dir / f"scaler_{variant}.joblib"
+
+            joblib.dump(clf, model_path)
+            joblib.dump(imputer, imputer_path)
+            joblib.dump(scaler, scaler_path)
+
+            elapsed = float(time.time() - t0)
+            completed_now = datetime.utcnow().isoformat()
+
+            del df, df_train, X, X_imp, X_scaled
+            gc.collect()
+
+            with self._lock:
+                with get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        UPDATE training_jobs
+                        SET status = 'completed', progress = 100, current_stage = 'Training completed successfully',
+                            completed_at = ?, model_path = ?, training_rows = ?, feature_count = ?,
+                            execution_time_s = ?, evaluation_metrics_json = ?
+                        WHERE job_id = ?
+                    """, (completed_now, str(model_path), train_rows, len(features), elapsed, json.dumps(eval_metrics), job_id))
+                    conn.commit()
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            self.update_training_job_status(job_id, "failed", 0, "Training failed", error_msg=str(e))
+
+
     def _run_job_worker(self, job_id: str, dataset_id: str, model_id: str, algorithm: str, params: Dict[str, Any]):
         t0 = time.time()
         try:
@@ -93,10 +273,21 @@ class JobManager:
 
             filepath = d_row["filepath"]
             filename = d_row["filename"]
-            df = pd.read_csv(filepath)
+
+            # Memory-conscious loading:
+            # First read header to inspect column names without loading rows
+            header_sample = pd.read_csv(filepath, nrows=1)
+            raw_cols = [str(c).strip() for c in header_sample.columns]
+
+            # Select only needed columns for ML (exclude non-ML metadata if any)
+            cols_to_load = raw_cols.copy()
+            has_labels = "Label" in raw_cols
+
+            # Load with optimized float32 where possible
+            dtype_dict = {c: np.float32 for c in raw_cols if c != "Label"}
+            df = pd.read_csv(filepath, usecols=cols_to_load, dtype=dtype_dict, low_memory=True)
             df.columns = [str(c).strip() for c in df.columns]
 
-            has_labels = "Label" in df.columns
             ground_truth_labels_series = None
             if has_labels:
                 ground_truth_labels_series = df["Label"].astype(str).str.replace("", "-", regex=False).str.replace(r"\s+", " ", regex=True).str.strip()
@@ -221,6 +412,10 @@ class JobManager:
                 save_dict["clusters"] = cluster_labels
             np.savez_compressed(out_file, **save_dict)
 
+            # Explicit memory cleanup
+            del df
+            gc.collect()
+
             # Mark completed in DB
             completed_now = datetime.utcnow().isoformat()
             with self._lock:
@@ -239,4 +434,4 @@ class JobManager:
             traceback.print_exc()
             self.update_job_status(job_id, "failed", 0, "Execution failed", error_msg=str(e))
 
-job_manager = JobManager()
+job_manager = JobManager(max_workers=2)

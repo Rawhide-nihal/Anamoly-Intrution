@@ -10,7 +10,8 @@ from typing import List, Optional, Dict, Any
 from ..schemas.base import (
     DatasetInfo, ValidationReport, ModelInfo,
     AnalysisJobCreate, AnalysisJobStatus, AnalysisResultSummary,
-    PaginatedPredictions, PredictionRow
+    PaginatedPredictions, PredictionRow,
+    TrainingJobCreate, TrainingJobStatus
 )
 from ..services.dataset_service import dataset_service
 from ..services.research_service import research_service
@@ -298,3 +299,38 @@ def get_plot_image(phase: str, filename: str):
     if not plot_path.exists():
         raise HTTPException(status_code=404, detail="Plot file not found")
     return FileResponse(plot_path, media_type="image/png")
+
+# ----------------- TRAINING & REPRODUCTION -----------------
+@router.post("/research/train", response_model=Dict[str, Any])
+def create_training_job(req: TrainingJobCreate):
+    ds = dataset_service.get_dataset(req.dataset_id)
+    if not ds:
+        raise HTTPException(status_code=404, detail=f"Dataset '{req.dataset_id}' not found.")
+    
+    val = dataset_service.validate_dataset(req.dataset_id)
+    if not val.valid:
+        raise HTTPException(status_code=400, detail="Dataset failed schema validation. Compatible numeric flow features are required.")
+
+    params = {
+        "n_estimators": req.n_estimators,
+        "contamination": req.contamination,
+        "random_state": req.random_state
+    }
+    job_id = job_manager.create_training_job(
+        dataset_id=req.dataset_id,
+        variant=req.variant,
+        params=params
+    )
+    return {"job_id": job_id, "status": "queued", "message": "Model training task registered in bounded worker pool."}
+
+@router.get("/research/train/jobs", response_model=List[TrainingJobStatus])
+def list_training_jobs():
+    return job_manager.list_training_jobs()
+
+@router.get("/research/train/jobs/{job_id}", response_model=TrainingJobStatus)
+def get_training_job_status(job_id: str):
+    job = job_manager.get_training_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Training job not found")
+    return job
+

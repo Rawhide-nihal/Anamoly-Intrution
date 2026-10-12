@@ -12,6 +12,7 @@ import { AnalyticsPage } from './pages/AnalyticsPage';
 import { ResearchPage } from './pages/ResearchPage';
 import { ModelsPage } from './pages/ModelsPage';
 import { ReportsPage } from './pages/ReportsPage';
+import { TrainingPage } from './pages/TrainingPage';
 import { AboutPage } from './pages/AboutPage';
 
 export function App() {
@@ -28,6 +29,7 @@ export function App() {
           <Route path="performance" element={<PerformancePage />} />
           <Route path="analytics" element={<AnalyticsPage />} />
           <Route path="research" element={<ResearchPage />} />
+          <Route path="training" element={<TrainingPage />} />
           <Route path="models" element={<ModelsPage />} />
           <Route path="reports" element={<ReportsPage />} />
           <Route path="about" element={<AboutPage />} />

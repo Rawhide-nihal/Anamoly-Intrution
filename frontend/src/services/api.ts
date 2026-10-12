@@ -5,7 +5,8 @@ import {
   AnalysisJobStatus,
   AnalysisResultSummary,
   PaginatedPredictions,
-  ResearchStatus
+  ResearchStatus,
+  TrainingJobStatus
 } from '../types';
 
 const API_BASE = '/api';
@@ -140,5 +141,37 @@ export const api = {
   async getResearchPlots(): Promise<Array<{ phase: string; filename: string; path: string; title: string }>> {
     const res = await fetch(`${API_BASE}/research/plots`);
     return res.json();
+  },
+
+  // Model Training & Reproduction
+  async createTrainingJob(params: {
+    dataset_id: string;
+    variant: string;
+    n_estimators?: number;
+    contamination?: number;
+    random_state?: number;
+  }): Promise<{ job_id: string; status: string; message: string }> {
+    const res = await fetch(`${API_BASE}/research/train`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Failed to submit training job');
+    }
+    return res.json();
+  },
+
+  async getTrainingJobs(): Promise<TrainingJobStatus[]> {
+    const res = await fetch(`${API_BASE}/research/train/jobs`);
+    return res.json();
+  },
+
+  async getTrainingJobStatus(jobId: string): Promise<TrainingJobStatus> {
+    const res = await fetch(`${API_BASE}/research/train/jobs/${jobId}`);
+    if (!res.ok) throw new Error('Training job not found');
+    return res.json();
   }
 };
+

@@ -54,6 +54,26 @@ def init_db():
                 results_summary_json TEXT
             )
         """)
+        # Training / Reproduction Jobs table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS training_jobs (
+                job_id TEXT PRIMARY KEY,
+                status TEXT NOT NULL,
+                progress INTEGER NOT NULL,
+                current_stage TEXT NOT NULL,
+                dataset_id TEXT NOT NULL,
+                variant TEXT NOT NULL,
+                params_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                completed_at TEXT,
+                error_message TEXT,
+                model_path TEXT,
+                training_rows INTEGER,
+                feature_count INTEGER,
+                execution_time_s REAL,
+                evaluation_metrics_json TEXT
+            )
+        """)
         conn.commit()
 
 init_db()

@@ -86,7 +86,34 @@ def test_pipeline():
         print(f"DBSCAN CSV Export header: {header_line[:60]}... (Total {len(csv_data.splitlines())} lines)")
         assert "original_dataset_row_index" in header_line
 
-        print("\nALL END-TO-END PIPELINE CHECKS (IF + DBSCAN + EXPORT) PASSED SUCCESSFULLY!")
+        # 3. Test Model Training / Reproduction Pipeline
+        print("\n--- Testing Model Training / Reproduction Pipeline ---")
+        req_tr = urllib.request.Request(
+            "http://127.0.0.1:8009/api/research/train",
+            data=json.dumps({
+                "dataset_id": ds_id,
+                "variant": "with_port",
+                "n_estimators": 50,
+                "contamination": 0.05,
+                "random_state": 42
+            }).encode("utf-8"),
+            headers={"Content-Type": "application/json"}
+        )
+        job_res_tr = json.loads(urllib.request.urlopen(req_tr).read().decode())
+        job_id_tr = job_res_tr["job_id"]
+        print(f"Training Job queued: {job_id_tr}")
+
+        for _ in range(15):
+            time.sleep(1)
+            st_tr = json.loads(urllib.request.urlopen(f"http://127.0.0.1:8009/api/research/train/jobs/{job_id_tr}").read().decode())
+            print(f"  Status: {st_tr['status']} ({st_tr['progress']}%, {st_tr['current_stage']})")
+            if st_tr["status"] in ("completed", "failed"):
+                break
+
+        assert st_tr["status"] == "completed", f"Training Job failed: {st_tr.get('error_message')}"
+        print(f"Training Complete! Trained rows: {st_tr['training_rows']}, Features: {st_tr['feature_count']}, Saved to: {st_tr['model_path']}")
+
+        print("\nALL END-TO-END PIPELINE CHECKS (IF + DBSCAN + EXPORT + TRAINING REPRODUCTION) PASSED SUCCESSFULLY!")
 
     finally:
         p_back.terminate()

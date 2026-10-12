@@ -144,3 +144,33 @@ export interface KDistanceElbowResponse {
   curve: Array<{ index: number; distance: number }>;
   sample_size: number;
 }
+
+export interface TrainingJobStatus {
+  job_id: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  progress: number;
+  current_stage: string;
+  dataset_id: string;
+  variant: string;
+  created_at: string;
+  completed_at?: string;
+  error_message?: string;
+  model_path?: string;
+  training_rows?: number;
+  feature_count?: number;
+  execution_time_s?: number;
+  evaluation_metrics?: {
+    training_rows: number;
+    feature_count: number;
+    features_used: string[];
+    n_estimators: number;
+    contamination: number;
+    random_state: number;
+    internal_flagged_count: number;
+    internal_anomaly_rate: number;
+    mean_anomaly_score: number;
+    max_anomaly_score: number;
+    min_anomaly_score: number;
+  };
+}
+

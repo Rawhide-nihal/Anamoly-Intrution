@@ -107,3 +107,27 @@ class PaginatedPredictions(BaseModel):
     rows: List[PredictionRow]
     is_sampled: Optional[bool] = False
     original_dataset_rows: Optional[int] = None
+
+class TrainingJobCreate(BaseModel):
+    dataset_id: str
+    variant: str = Field("with_port", pattern="^(with_port|without_port)$")
+    n_estimators: int = Field(200, ge=10, le=500)
+    contamination: float = Field(0.01, ge=0.0001, le=0.5)
+    random_state: int = Field(42, ge=0)
+
+class TrainingJobStatus(BaseModel):
+    job_id: str
+    status: str # "queued", "running", "completed", "failed"
+    progress: int
+    current_stage: str
+    dataset_id: str
+    variant: str
+    created_at: str
+    completed_at: Optional[str] = None
+    error_message: Optional[str] = None
+    model_path: Optional[str] = None
+    training_rows: Optional[int] = None
+    feature_count: Optional[int] = None
+    execution_time_s: Optional[float] = None
+    evaluation_metrics: Optional[Dict[str, Any]] = None
+

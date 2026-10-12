@@ -29,6 +29,7 @@ const navItems = [
   { path: '/performance', label: 'Model Benchmarks', icon: BarChart3 },
   { path: '/analytics', label: 'Visual Analytics', icon: LineChart },
   { path: '/research', label: 'Research Experiments', icon: BookOpen },
+  { path: '/training', label: 'Model Training & Reproduction', icon: Cpu },
   { path: '/models', label: 'Model Inventory', icon: Boxes },
   { path: '/reports', label: 'Reports & Export', icon: FileSpreadsheet },
   { path: '/about', label: 'Academic & System Info', icon: Info },
