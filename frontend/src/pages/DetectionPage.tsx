@@ -402,6 +402,22 @@ export const DetectionPage: React.FC = () => {
                   <div>Job ID: <span className="text-slate-200">{activeJob.job_id.slice(0, 8)}...</span></div>
                   <div>Algorithm: <span className="text-slate-200">{activeJob.algorithm}</span></div>
                 </div>
+
+                {activeJob.status !== 'completed' && activeJob.status !== 'failed' && activeJob.status !== 'cancelled' && (
+                  <button
+                    onClick={async () => {
+                      try {
+                        await api.cancelJob(activeJob.job_id);
+                        setActiveJob((prev) => prev ? { ...prev, status: 'cancelled', current_stage: 'Cancelled by user' } : null);
+                      } catch (err: any) {
+                        setErrorMsg(err.message || 'Failed to cancel job');
+                      }
+                    }}
+                    className="w-full py-1.5 px-3 rounded bg-red-950/40 border border-red-500/30 text-red-400 hover:bg-red-900/40 text-[11px] font-mono transition-all"
+                  >
+                    Cancel Analysis Job
+                  </button>
+                )}
               </div>
             ) : (
               <div className="p-6 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-lg">

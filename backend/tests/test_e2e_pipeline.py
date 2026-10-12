@@ -113,10 +113,33 @@ def test_pipeline():
         assert st_tr["status"] == "completed", f"Training Job failed: {st_tr.get('error_message')}"
         print(f"Training Complete! Trained rows: {st_tr['training_rows']}, Features: {st_tr['feature_count']}, Saved to: {st_tr['model_path']}")
 
-        print("\nALL END-TO-END PIPELINE CHECKS (IF + DBSCAN + EXPORT + TRAINING REPRODUCTION) PASSED SUCCESSFULLY!")
+        # 4. Test Job Cancellation (Resource Control)
+        print("\n--- Testing Job Cancellation & Resource Control ---")
+        req_cancel_test = urllib.request.Request(
+            "http://127.0.0.1:8009/api/jobs",
+            data=json.dumps({"dataset_id": ds_id, "model_id": "if_with_port", "algorithm": "isolation_forest"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"}
+        )
+        cancel_job_res = json.loads(urllib.request.urlopen(req_cancel_test).read().decode())
+        c_job_id = cancel_job_res["job_id"]
+        # Immediately cancel
+        req_cancel_post = urllib.request.Request(
+            f"http://127.0.0.1:8009/api/jobs/{c_job_id}/cancel",
+            data=b"{}",
+            headers={"Content-Type": "application/json"}
+        )
+        cancelled_ack = json.loads(urllib.request.urlopen(req_cancel_post).read().decode())
+        print(f"Cancellation dispatched for {c_job_id}: status={cancelled_ack['status']}")
+        time.sleep(1)
+        st_cancelled = json.loads(urllib.request.urlopen(f"http://127.0.0.1:8009/api/jobs/{c_job_id}").read().decode())
+        print(f"Final status of cancelled job: {st_cancelled['status']} ({st_cancelled['current_stage']})")
+        assert st_cancelled["status"] == "cancelled", f"Job status was {st_cancelled['status']}, expected 'cancelled'"
+
+        print("\nALL END-TO-END PIPELINE CHECKS (IF + DBSCAN + EXPORT + TRAINING REPRODUCTION + CANCELLATION) PASSED SUCCESSFULLY!")
 
     finally:
         p_back.terminate()
 
 if __name__ == "__main__":
     test_pipeline()
+

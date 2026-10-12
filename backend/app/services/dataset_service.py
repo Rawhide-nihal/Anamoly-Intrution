@@ -12,6 +12,19 @@ from ..config import UPLOADS_DIR, SAMPLE_DATA_DIR, ZERO_VARIANCE_DROPPED, RESULT
 from ..storage.db import get_connection
 from ..schemas.base import ValidationReport, DatasetInfo
 
+def normalize_labels(series: pd.Series) -> pd.Series:
+    """
+    Standardize raw network traffic labels according to research protocol:
+    Replaces corrupt encoding artifacts (e.g. \ufffd from Windows-1252 to '-'),
+    collapses multiple whitespaces, strips leading/trailing spaces.
+    """
+    return (
+        series.astype(str)
+        .str.replace("\ufffd", "-", regex=False)
+        .str.replace(r"\s+", " ", regex=True)
+        .str.strip()
+    )
+
 class DatasetService:
     def __init__(self):
         self._seed_sample_datasets()
@@ -26,7 +39,7 @@ class DatasetService:
                     df = pd.read_csv(sample_file)
                     cols = [str(c).strip() for c in df.columns]
                     has_labels = "Label" in cols
-                    dist = df["Label"].value_counts().to_dict() if has_labels else None
+                    dist = normalize_labels(df["Label"]).value_counts().to_dict() if has_labels else None
                     now = datetime.utcnow().isoformat()
                     cursor.execute("""
                         INSERT INTO datasets (id, filename, filepath, size_bytes, row_count, column_count, columns_json, has_labels, label_distribution_json, created_at, is_sample)
@@ -129,7 +142,7 @@ class DatasetService:
             if has_labels:
                 try:
                     df_labels = pd.read_csv(target_path, usecols=["Label"])
-                    dist = df_labels["Label"].astype(str).value_counts().to_dict()
+                    dist = normalize_labels(df_labels["Label"]).value_counts().to_dict()
                 except Exception:
                     dist = None
 
@@ -202,7 +215,7 @@ class DatasetService:
         dup_count = int(df.duplicated().sum())
 
         has_labels = "Label" in cols
-        labels_list = list(df["Label"].astype(str).unique()) if has_labels else None
+        labels_list = list(normalize_labels(df["Label"]).unique()) if has_labels else None
 
         compatible_models = []
         if len(missing_with_port) == 0:

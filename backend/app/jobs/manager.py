@@ -8,18 +8,32 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Set
 
 from ..config import JOBS_DATA_DIR, ZERO_VARIANCE_DROPPED
 from ..storage.db import get_connection
 from ..ml.service import ml_service
 from ..schemas.base import AnalysisJobStatus, AnalysisResultSummary
 
+def normalize_traffic_labels(series: pd.Series) -> pd.Series:
+    """
+    Standardize network traffic labels according to research protocol:
+    Replaces corrupt encoding artifacts (e.g. \ufffd from Windows-1252 to '-'),
+    collapses multiple whitespaces, strips leading/trailing spaces.
+    """
+    return (
+        series.astype(str)
+        .str.replace("\ufffd", "-", regex=False)
+        .str.replace(r"\s+", " ", regex=True)
+        .str.strip()
+    )
+
 class JobManager:
     def __init__(self, max_workers: int = 2):
         self._lock = threading.Lock()
         # Bounded worker pool: prevents unlimited concurrent jobs from exhausting laptop RAM/CPU
         self._executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="ids_worker")
+        self._cancelled_jobs: Set[str] = set()
         self._cleanup_interrupted_jobs()
 
     def _cleanup_interrupted_jobs(self):
@@ -35,9 +49,54 @@ class JobManager:
                         error_message = 'Process terminated unexpectedly during server lifecycle restart.'
                     WHERE status IN ('queued', 'validating', 'preparing_data', 'running_analysis', 'generating_output')
                 """)
+                cursor.execute("""
+                    UPDATE training_jobs
+                    SET status = 'failed', current_stage = 'Interrupted by server restart',
+                        error_message = 'Process terminated unexpectedly during server lifecycle restart.'
+                    WHERE status IN ('queued', 'running')
+                """)
                 conn.commit()
         except Exception as e:
             print("Failed to clean up interrupted jobs:", e)
+
+    def cancel_job(self, job_id: str) -> bool:
+        """
+        Cancel a queued or running analysis or training job.
+        """
+        with self._lock:
+            self._cancelled_jobs.add(job_id)
+            with get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT status FROM jobs WHERE job_id = ?", (job_id,))
+                row = cursor.fetchone()
+                if row:
+                    if row["status"] in ("completed", "failed", "cancelled"):
+                        return False
+                    cursor.execute("""
+                        UPDATE jobs
+                        SET status = 'cancelled', current_stage = 'Cancelled by user', error_message = 'Job execution was cancelled.'
+                        WHERE job_id = ?
+                    """, (job_id,))
+                    conn.commit()
+                    return True
+
+                cursor.execute("SELECT status FROM training_jobs WHERE job_id = ?", (job_id,))
+                t_row = cursor.fetchone()
+                if t_row:
+                    if t_row["status"] in ("completed", "failed", "cancelled"):
+                        return False
+                    cursor.execute("""
+                        UPDATE training_jobs
+                        SET status = 'cancelled', current_stage = 'Cancelled by user', error_message = 'Training was cancelled.'
+                        WHERE job_id = ?
+                    """, (job_id,))
+                    conn.commit()
+                    return True
+        return False
+
+    def is_cancelled(self, job_id: str) -> bool:
+        with self._lock:
+            return job_id in self._cancelled_jobs
 
     def create_job(self, dataset_id: str, model_id: str, algorithm: str, params: Dict[str, Any]) -> str:
         job_id = str(uuid.uuid4())
@@ -135,6 +194,9 @@ class JobManager:
     def _run_training_worker(self, job_id: str, dataset_id: str, variant: str, params: Dict[str, Any]):
         t0 = time.time()
         try:
+            if self.is_cancelled(job_id):
+                return
+
             from sklearn.ensemble import IsolationForest
             from sklearn.impute import SimpleImputer
             from sklearn.preprocessing import StandardScaler
@@ -150,44 +212,64 @@ class JobManager:
                 raise ValueError("Dataset not found in storage")
 
             filepath = d_row["filepath"]
-            df = pd.read_csv(filepath, low_memory=True)
-            df.columns = [str(c).strip() for c in df.columns]
+
+            # Memory-conscious loading: first inspect columns
+            header_sample = pd.read_csv(filepath, nrows=1)
+            raw_cols = [str(c).strip() for c in header_sample.columns]
 
             # Determine feature list
             feat_path = ml_service.feature_lists
             features = feat_path.get(variant, [])
             if not features:
-                # Fallback to current numeric features if not loaded
-                num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-                features = [c for c in num_cols if c not in ZERO_VARIANCE_DROPPED and c != "Label"]
+                num_cols = [c for c in raw_cols if c not in ZERO_VARIANCE_DROPPED and c != "Label"]
+                features = num_cols
                 if variant == "without_port" and "Destination Port" in features:
                     features.remove("Destination Port")
 
-            missing_feats = [f for f in features if f not in df.columns]
+            missing_feats = [f for f in features if f not in raw_cols]
             if missing_feats:
                 raise ValueError(f"Dataset lacks {len(missing_feats)} features required for {variant}: {missing_feats[:5]}")
+
+            cols_to_load = list(set(features + (["Label"] if "Label" in raw_cols else [])))
+            dtype_dict = {c: np.float32 for c in cols_to_load if c != "Label"}
+            df = pd.read_csv(filepath, usecols=cols_to_load, dtype=dtype_dict, low_memory=True)
+            df.columns = [str(c).strip() for c in df.columns]
+
+            if self.is_cancelled(job_id):
+                return
 
             self.update_training_job_status(job_id, "running", 25, "Filtering benign baseline flows (unsupervised training)")
 
             # Academic protocol: train exclusively on BENIGN flows if labels exist
             if "Label" in df.columns:
-                benign_mask = df["Label"].astype(str).str.upper().str.contains("BENIGN")
-                df_train = df[benign_mask].copy()
-                if len(df_train) == 0:
-                    df_train = df.copy() # fallback if label naming differs
+                norm_labels = normalize_traffic_labels(df["Label"])
+                benign_mask = (norm_labels == "BENIGN")
+                benign_count = int(benign_mask.sum())
+                if benign_count == 0:
+                    raise ValueError("Cannot train anomaly detection baseline: No BENIGN flows found in dataset.")
+                df_train = df.loc[benign_mask, features].copy()
             else:
-                df_train = df.copy()
+                df_train = df[features].copy()
 
             train_rows = len(df_train)
-            X = df_train[features].copy()
-            X = X.replace([np.inf, -np.inf], np.nan)
+            del df
+            gc.collect()
+
+            if self.is_cancelled(job_id):
+                return
 
             self.update_training_job_status(job_id, "running", 45, "Fitting Median Imputer & Standard Scaler")
+            df_train = df_train.replace([np.inf, -np.inf], np.nan)
             imputer = SimpleImputer(strategy="median")
-            X_imp = imputer.fit_transform(X)
+            X_imp = imputer.fit_transform(df_train)
 
             scaler = StandardScaler()
             X_scaled = scaler.fit_transform(X_imp).astype(np.float32)
+            del df_train, X_imp
+            gc.collect()
+
+            if self.is_cancelled(job_id):
+                return
 
             self.update_training_job_status(job_id, "running", 60, f"Training Isolation Forest ({params.get('n_estimators', 200)} trees)")
             n_estimators = int(params.get("n_estimators", 200))
@@ -201,6 +283,9 @@ class JobManager:
                 n_jobs=-1
             )
             clf.fit(X_scaled)
+
+            if self.is_cancelled(job_id):
+                return
 
             self.update_training_job_status(job_id, "running", 85, "Evaluating trained model & saving artifacts")
 
@@ -237,8 +322,11 @@ class JobManager:
             elapsed = float(time.time() - t0)
             completed_now = datetime.utcnow().isoformat()
 
-            del df, df_train, X, X_imp, X_scaled
+            del X_scaled, raw_scores, pred_flags
             gc.collect()
+
+            if self.is_cancelled(job_id):
+                return
 
             with self._lock:
                 with get_connection() as conn:
@@ -253,14 +341,19 @@ class JobManager:
                     conn.commit()
 
         except Exception as e:
-            import traceback
-            traceback.print_exc()
-            self.update_training_job_status(job_id, "failed", 0, "Training failed", error_msg=str(e))
+            if not self.is_cancelled(job_id):
+                import traceback
+                traceback.print_exc()
+                self.update_training_job_status(job_id, "failed", 0, "Training failed", error_msg=str(e))
+
 
 
     def _run_job_worker(self, job_id: str, dataset_id: str, model_id: str, algorithm: str, params: Dict[str, Any]):
         t0 = time.time()
         try:
+            if self.is_cancelled(job_id):
+                return
+
             self.update_job_status(job_id, "validating", 10, "Validating dataset and schema")
             
             # Fetch dataset info from db
@@ -288,15 +381,21 @@ class JobManager:
             df = pd.read_csv(filepath, usecols=cols_to_load, dtype=dtype_dict, low_memory=True)
             df.columns = [str(c).strip() for c in df.columns]
 
+            if self.is_cancelled(job_id):
+                return
+
             ground_truth_labels_series = None
             if has_labels:
-                ground_truth_labels_series = df["Label"].astype(str).str.replace("", "-", regex=False).str.replace(r"\s+", " ", regex=True).str.strip()
+                ground_truth_labels_series = normalize_traffic_labels(df["Label"])
 
             self.update_job_status(job_id, "preparing_data", 30, "Preparing data tensors and transformations")
 
             scores = None
             cluster_labels = None
             cluster_stats = None
+
+            if self.is_cancelled(job_id):
+                return
 
             if algorithm == "isolation_forest":
                 self.update_job_status(job_id, "running_analysis", 60, "Executing Isolation Forest scoring")
@@ -313,6 +412,9 @@ class JobManager:
                 actual_analyzed_rows = len(preds)
             else:
                 raise ValueError(f"Unsupported algorithm: {algorithm}")
+
+            if self.is_cancelled(job_id):
+                return
 
             self.update_job_status(job_id, "generating_output", 85, "Compiling metrics and analytics")
 
@@ -416,6 +518,9 @@ class JobManager:
             del df
             gc.collect()
 
+            if self.is_cancelled(job_id):
+                return
+
             # Mark completed in DB
             completed_now = datetime.utcnow().isoformat()
             with self._lock:
@@ -430,8 +535,10 @@ class JobManager:
                     conn.commit()
 
         except Exception as e:
-            import traceback
-            traceback.print_exc()
-            self.update_job_status(job_id, "failed", 0, "Execution failed", error_msg=str(e))
+            if not self.is_cancelled(job_id):
+                import traceback
+                traceback.print_exc()
+                self.update_job_status(job_id, "failed", 0, "Execution failed", error_msg=str(e))
+
 
 job_manager = JobManager(max_workers=2)

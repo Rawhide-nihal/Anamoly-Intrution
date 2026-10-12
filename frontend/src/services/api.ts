@@ -94,6 +94,15 @@ export const api = {
     return res.json();
   },
 
+  async cancelJob(jobId: string): Promise<{ job_id: string; status: string; message: string }> {
+    const res = await fetch(`${API_BASE}/jobs/${jobId}/cancel`, { method: 'POST' });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Failed to cancel job');
+    }
+    return res.json();
+  },
+
   async getJobResults(jobId: string): Promise<AnalysisResultSummary> {
     const res = await fetch(`${API_BASE}/jobs/${jobId}/results`);
     if (!res.ok) throw new Error('Results not ready');

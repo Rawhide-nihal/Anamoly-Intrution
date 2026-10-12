@@ -140,9 +140,28 @@ export const TrainingPage: React.FC = () => {
                 <p className="text-xs text-cyan-300 font-mono">{activeJob.current_stage}</p>
               </div>
             </div>
-            <span className="text-xs font-mono px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-              {activeJob.status.toUpperCase()} ({activeJob.progress}%)
-            </span>
+            <div className="flex items-center space-x-2">
+              <span className="text-xs font-mono px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                {activeJob.status.toUpperCase()} ({activeJob.progress}%)
+              </span>
+              {activeJob.status !== 'completed' && activeJob.status !== 'failed' && activeJob.status !== 'cancelled' && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await api.cancelJob(activeJob.job_id);
+                      setActiveJob((prev) => prev ? { ...prev, status: 'cancelled', current_stage: 'Cancelled by user' } : null);
+                      setActiveJobId(null);
+                    } catch (err: any) {
+                      setError(err.message || 'Failed to cancel training job');
+                    }
+                  }}
+                  className="px-2 py-0.5 rounded bg-red-950/40 border border-red-500/30 text-red-400 hover:bg-red-900/40 text-xs font-mono transition-all"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="w-full bg-slate-900 rounded-full h-2 overflow-hidden border border-slate-800">

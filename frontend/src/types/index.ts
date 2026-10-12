@@ -147,7 +147,7 @@ export interface KDistanceElbowResponse {
 
 export interface TrainingJobStatus {
   job_id: string;
-  status: 'queued' | 'running' | 'completed' | 'failed';
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
   progress: number;
   current_stage: string;
   dataset_id: string;
