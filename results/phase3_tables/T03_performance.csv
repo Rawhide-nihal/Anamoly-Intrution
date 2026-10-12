@@ -1,0 +1,13 @@
+Measure,Isolation Forest,DBSCAN
+Training paradigm,trained on BENIGN only,unsupervised clustering of a mixed sample
+Evaluation paradigm,out-of-sample (unseen test set),transductive (same rows clustered)
+Features,70,70
+Evaluation size,"1,054,824","50,000"
+Precision,0.8387,0.1061
+Recall,0.5789,0.0205
+F1,0.6850,0.0344
+FPR,0.0754,0.0346
+FNR,0.4211,0.9795
+ROC-AUC,0.8082,not applicable (binary noise output)
+Runtime,fit 0.95 s; predict 5.33 s,15.5 s (one clustering run)
+Memory,peak process 5.9 GB (data loading dominates),~7.7 GB est. neighbour storage; process peak 8.1 GB over all 2B runs

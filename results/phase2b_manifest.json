@@ -1,0 +1,22 @@
+{
+  "phase": "2B",
+  "created": "2026-10-02 14:48:14",
+  "transductive": true,
+  "sha256": {
+    "results/phase2b_report.txt": "724c631d849712d9a376c4ca398fbccd2c3ef9f54ec8b228a2a277229597d0d6",
+    "results/phase2b_metrics.json": "8089f07e74072d6baa6128286e2ea36f0fbedbd3039dc46b04519262158ed1f2",
+    "results/phase2b_config.json": "0aabbaceeff0c4c32e03057fa7514a63028f65771a3bd1c6ee148e4b279a9007",
+    "results/phase2b_sample_ids.csv": "4235fdf968ac550382fb77ee16722dcb9c28935a82d6ac8055f9d70c301d3abf",
+    "results/phase2b_cluster_assignments.npz": "e750b0cdc3a12bc9db3b427f43396b95b505977b47163712b69bf23545ab92e4",
+    "results/phase2b_preprocessing.pkl": "b09689877161c5fb82ed1c15997e1e22a7d4d8807d858bc9d79d5fa2fa141a30",
+    "scripts/phase2b.py": "daf57ef132855777de5e93ddd5283740f628f7229683d4e1f04d5fcc78daec83",
+    "plots/phase2b/01_k_distance.png": "efe057bcb2ae1d003f54ae0ed74e2c995bff01f95e8504e82bdd894a508dff2b",
+    "plots/phase2b/02_cluster_size_distribution.png": "8f57d51ece7e9237757f50d9da81d4c5cc0e591593b6ac7d7e0402eef1b577e8",
+    "plots/phase2b/03_noise_vs_non_noise.png": "8e1db2fc2babd5a2fb0804cd8cdbd05a98273d4f0212a0222ff44af071b8cb2a",
+    "plots/phase2b/04_confusion_matrix.png": "89ef24610811853bf91dfa13ec475b481e146cb1b783c00a76c02e743c032203",
+    "plots/phase2b/05_pca_explained_variance.png": "b0e6a74f6b6562f2bd643874fd53f00bfafd7135eaec69572bcf17e9a345edfa",
+    "plots/phase2b/06_noise_pct_by_configuration.png": "5640ce1a1b640ba4ae98fe2995557aff3ad845e3ad576e49acc3389d34694747",
+    "plots/phase2b/07_attack_category_flagged.png": "21f48fa996088e947d753de89be7ee45d4836b64443b3e3f74a7cd8781bc5ec8",
+    "plots/phase2b/08_sensitivity_noise_pct.png": "89885979603087889d589a9ccd3b62da1e239e6fd0d5e85686a12510238eca11"
+  }
+}

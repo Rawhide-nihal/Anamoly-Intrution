@@ -1,0 +1,8 @@
+Property,Isolation Forest,DBSCAN
+Anomaly definition,easy to isolate by random partitions (short average path length),density noise: not a core point and not within eps of one
+Training data,BENIGN only,unlabelled mixed sample
+Unseen observations,predict()/decision_function on new rows,no standard sklearn predict(); transductive
+Output,continuous score + threshold,binary noise / cluster id
+ROC analysis,yes (score),no intrinsic score
+Parameter sensitivity shown,2A: n=200 cross-seed score Spearman 0.991,noise 1.55-11.00% across grid
+Scale dependence,per-feature splits,Euclidean distances; standardisation essential

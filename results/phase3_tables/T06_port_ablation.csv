@@ -1,0 +1,18 @@
+Algorithm,Measure,WITH Port (70),WITHOUT Port (69),Delta
+Isolation Forest,Precision,0.8387,0.8273,-0.0114
+Isolation Forest,Recall,0.5789,0.5677,-0.0113
+Isolation Forest,F1,0.6850,0.6733,-0.0117
+Isolation Forest,FPR,0.0754,0.0802,+0.0048
+Isolation Forest,FNR,0.4211,0.4323,+0.0113
+Isolation Forest,ROC-AUC,0.8082,0.8140,+0.0058
+Isolation Forest,Score Pearson / prediction agreement,,,"0.997 / 98.8% (12,197 changed)"
+DBSCAN,"eps (re-selected, same rule)",2.552,3.100,+0.547
+DBSCAN,Clusters,56,44,-12
+DBSCAN,Noise %,3.22,2.30,-0.93 pp
+DBSCAN,Precision,0.1061,0.0880,-0.0181
+DBSCAN,Recall,0.0205,0.0121,-0.0084
+DBSCAN,F1,0.0344,0.0213,-0.0131
+DBSCAN,FPR,0.0346,0.0251,-0.0095
+DBSCAN,FNR,0.9795,0.9879,+0.0084
+DBSCAN,Noise-set Jaccard / rows changed,,,0.712 / 464
+DBSCAN,Feature-identical rows in 50k,0,"2,872",

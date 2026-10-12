@@ -1,0 +1,28 @@
+{
+  "phase": "2C",
+  "created": "2026-10-02 15:03:51",
+  "frozen_manifest_sha256_verified": {
+    "2A": "6a0fa67c7c7a2c75e17bb73502b7829a5ba98ccf2bd33d14f1bc9ece6855ca5d",
+    "2B": "8ca80daf2567cc869a950bbbc02f6671314f509f5e2435ea6e99b6379d992a9d"
+  },
+  "sha256": {
+    "results/phase2c_report.txt": "fe03750285da14849556a43303ec08f08beb3c7ad35d102816327e1fdf142aef",
+    "results/phase2c_metrics.json": "ee15dea3ef9e00e06117aa4a9ccf2d3a1c723872bb48ddc92327bed412be5c09",
+    "results/phase2c_config.json": "d35e3ad9478086a0df279d2e8ebdb826533f15f8d94359b959b705a13be0e1c7",
+    "results/phase2c_feature_lists.json": "daa3948203ef6a0ec0d2b616f65bbceb1fdaf97c170eaf8188bfb817975d0894",
+    "results/phase2c_dbscan_cluster_assignments.npz": "cf5f31015a94eab46cd4faa69616aa9e58423f5b45df88cc6a4ff37f7ddeaff2",
+    "models/isolation_forest_no_port.pkl": "1303bca1103927c8f512cb02b00c145fd615ec04a8f1dc35a327899771f68d8a",
+    "models/imputer_no_port.pkl": "b9a6c5e558b94c6398e1b18fc02dfe9cc85ba9cdcb27b48690af498a2ccfc850",
+    "models/scaler_no_port.pkl": "01ffd8ac83628a3e5bd18f36df080aadf52ee7ace5461631dd6b5addbe8af6d8",
+    "results/phase2c_dbscan_preprocessing.pkl": "df12aac2376fba297030d5f967092d9c57978ce9f5124d331a4d3a1918057bda",
+    "scripts/phase2c.py": "cbf49bd1a3d3d45dc55bc73fc5c8e012eb7aeae93754b2a8cf0e47ca027d9441",
+    "plots/phase2c/01_destination_port_distribution.png": "a6c0e436481846be2a281c4c04582fe223760c2abefd354173aa2fc98eff3b34",
+    "plots/phase2c/02_if_metric_comparison.png": "4e24ca540d0adaf310cfe77683ba70f74181f0b5aa86557d78097a421374db4a",
+    "plots/phase2c/03_if_anomaly_score_comparison.png": "ebac1861505b0081a0ef5da51b6ebbcf9d7d13c55342355e240c44ed2f8881cb",
+    "plots/phase2c/04_dbscan_k_distance_comparison.png": "ffef906c642ac50d04c45c3f04efaf8b3f360225d25b56631df8df148b5c5d2e",
+    "plots/phase2c/05_dbscan_noise_pct.png": "92dda23054bf825f1a535cb764fea7e96d13553c6d6ebbb3e8d93e39846427b3",
+    "plots/phase2c/06_dbscan_metric_comparison.png": "7256412a27123d34450f5ab3e7ea96d86715323cc086a3955b16cc1439a5402a",
+    "plots/phase2c/07_dbscan_noise_overlap.png": "7fc1369a05a999161e562e33508226042d4713b0377dd7c80d52ae89af4d7f53",
+    "plots/phase2c/08_attack_category_comparison.png": "b9715ed55727b08bec3b8b77a2a2a09b0b262664b70254fd7af5173660782beb"
+  }
+}

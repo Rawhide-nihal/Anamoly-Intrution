@@ -1,0 +1,134 @@
+======================================================================
+ISOLATION FOREST — BASELINE RESULTS  (primary, pre-specified configuration)
+======================================================================
+
+Dataset:
+  Training: 1,467,538 rows (BENIGN only)
+  Testing:  1,054,824 rows (628,946 unseen BENIGN + 425,878 attack; attack share 40.37%)
+  Features: 70 (78 raw - 8 zero-variance; Destination Port retained)
+  Zero-variance dropped (rule: X_train.var() == 0 on full TRAIN): ['Bwd PSH Flags', 'Bwd URG Flags', 'Fwd Avg Bytes/Bulk', 'Fwd Avg Packets/Bulk', 'Fwd Avg Bulk Rate', 'Bwd Avg Bytes/Bulk', 'Bwd Avg Packets/Bulk', 'Bwd Avg Bulk Rate']
+  Note: The earlier EDA notebook reported 10 constant columns because it inspected a 40,000-row sample (first 5,000 rows per file). 'Fwd URG Flags' and 'CWE Flag Count' are constant in that sample and in 7 of 8 files, but not in the full data: each has 56 non-zero rows in TRAIN and 24 in TEST (all BENIGN, all from the Thursday-Afternoon file), and the two columns are identical. They are therefore kept. See results/zero_variance_reconciliation.txt.
+
+Parameters:
+  n_estimators  = 200 (trees fitted: 200)
+  max_samples   = 'auto' -> 256 rows per tree
+  contamination = 'auto' (offset_ = -0.5; flags 7.525% of TRAIN)
+  random_state  = 42 | n_jobs = -1
+  Score: anomaly_score = -decision_function (higher = more anomalous); threshold 0
+
+Confusion Matrix (rows = truth, cols = prediction):
+                 Pred normal   Pred anomaly
+  BENIGN (0)         581,525         47,421
+  ATTACK (1)         179,318        246,560
+
+  TP=246,560  TN=581,525  FP=47,421  FN=179,318
+
+Accuracy:  0.7850
+Precision: 0.8387
+Recall:    0.5789
+F1:        0.6850
+FPR:       0.0754
+FNR:       0.4211
+ROC-AUC:   0.8082
+
+Training Time:   0.95 s
+Prediction Time: 5.33 s for predict() on 1,054,824 rows (5.27 s for decision_function)
+
+Attack Category Detection
+(share of each category's test traffic flagged as anomalous — NOT a classification)
+  Category                        Total  Flagged   Missed     Rate   95% CI
+  DoS Hulk                      172,849  154,311   18,538   89.28%   [89.1%, 89.4%]
+  DDoS                          128,016   79,404   48,612   62.03%   [61.8%, 62.3%]
+  PortScan                       90,819      221   90,598    0.24%   [0.2%, 0.3%]
+  DoS GoldenEye                  10,286    5,052    5,234   49.12%   [48.1%, 50.1%]
+  FTP-Patator                     5,933        0    5,933    0.00%   [0.0%, 0.1%]
+  DoS slowloris                   5,385    3,108    2,277   57.72%   [56.4%, 59.0%]
+  DoS Slowhttptest                5,228    4,290      938   82.06%   [81.0%, 83.1%]
+  SSH-Patator                     3,219        0    3,219    0.00%   [0.0%, 0.1%]
+  Bot                             1,953       44    1,909    2.25%   [1.7%, 3.0%]
+  Web Attack - Brute Force        1,470       73    1,397    4.97%   [4.0%, 6.2%]
+  Web Attack - XSS                  652       16      636    2.45%   [1.5%, 3.9%]
+  Infiltration                       36       30        6   83.33%   [68.1%, 92.1%]  * small n
+  Web Attack - Sql Injection         21        0       21    0.00%   [0.0%, 15.5%]  * small n
+  Heartbleed                         11       11        0  100.00%   [74.1%, 100.0%]  * small n
+  (reference: unseen BENIGN test traffic flagged 7.54%)
+  * n < 100: the rate rests on very few flows (CI shown); it should not be generalised to the attack type.
+
+----------------------------------------------------------------------
+SENSITIVITY ANALYSES (descriptive only — none of these changes the primary model)
+----------------------------------------------------------------------
+
+A. Training-threshold sensitivity (contamination)
+   Same 200-tree forest; threshold = percentile of TRAINING scores; NOT model selection.
+    contam train flag  anom %    Prec  Recall      F1     FPR     FNR
+      auto     7.525%  27.87%  0.8387  0.5789  0.6850  0.0754  0.4211  <- primary
+     0.001     0.100%   0.06%  0.0216  0.0000  0.0001  0.0009  1.0000
+     0.005     0.500%   0.66%  0.5504  0.0089  0.0176  0.0049  0.9911
+      0.01     1.000%   4.81%  0.8769  0.1044  0.1866  0.0099  0.8956
+      0.02     2.000%  15.84%  0.9249  0.3628  0.5211  0.0200  0.6372
+      0.05     5.000%  19.04%  0.8436  0.3979  0.5408  0.0500  0.6021
+       0.1    10.000%  29.86%  0.8004  0.5920  0.6806  0.1000  0.4080
+
+B. n_estimators stability (validation = 10% held-out TRAIN BENIGN; 3 seeds; label-free)
+      n  seed rho   min rho  pred agree  score SD  val flag %   fit s
+    100   0.97998   0.97942     0.98751   0.00574      7.724%     0.5
+    200   0.99050   0.98853     0.99270   0.00406      7.676%     0.9
+    300   0.99284   0.99205     0.99363   0.00362      7.756%     1.4
+
+C. n_estimators test-set sensitivity (seed 42, full TRAIN)
+      n    Prec  Recall      F1     FPR     AUC  rho vs 200   fit s  score s
+    100  0.8400  0.5863  0.6906  0.0756  0.8112     0.99457     0.5      2.7
+    200  0.8387  0.5789  0.6850  0.0754  0.8082     1.00000     1.0      5.3  <- primary
+    300  0.8341  0.5790  0.6835  0.0780  0.8052     0.99871     1.5      7.9
+  Per-category flag rate by forest size:
+    Category                        n=100    n=200    n=300
+    DoS Hulk                       89.83%   89.28%   89.02%
+    DDoS                           63.24%   62.03%   62.12%
+    PortScan                        0.22%    0.24%    0.28%
+    DoS GoldenEye                  54.94%   49.12%   51.87%
+    FTP-Patator                     0.00%    0.00%    0.00%
+    DoS slowloris                  57.46%   57.72%   58.11%
+    DoS Slowhttptest               82.59%   82.06%   82.08%
+    SSH-Patator                     0.00%    0.00%    0.00%
+    Bot                             2.25%    2.25%    2.25%
+    Web Attack - Brute Force        4.97%    4.97%    4.97%
+    Web Attack - XSS                2.76%    2.45%    2.45%
+    Infiltration                   80.56%   83.33%   86.11%
+    Web Attack - Sql Injection      0.00%    0.00%    0.00%
+    Heartbleed                    100.00%  100.00%  100.00%
+
+Computational Report
+  Samples: train 1,467,538 | test 1,054,824 | features 70
+  Model input matrices (float32): train 0.41 GB, test 0.30 GB
+  Peak process RAM (working set): 5.86 GB — dominated by loading/deduplicating the raw CSVs, not by the model
+  Trees: 200 x 256 samples each (subsampling makes fit cost independent of training-set size)
+  Training: 0.95 s | decision_function on test: 5.27 s | predict() on test: 5.33 s | scoring TRAIN: 8.81 s
+  Saved artifact sizes: isolation_forest 0.36 MB, imputer 0.00 MB, scaler 0.00 MB, preprocessing_meta 0.00 MB
+  Total script wall time: 2.1 min
+
+Sanity Checks
+  [PASS] no Label column in model features
+  [PASS] no binary_label in model features
+  [PASS] model n_features_in_ == feature count
+  [PASS] zero-variance columns == approved 8
+  [PASS] no NaN in X_train/X_test
+  [PASS] no inf in X_train/X_test
+  [PASS] training data BENIGN only
+  [PASS] test data = BENIGN + all 14 attacks
+  [PASS] random_state == 42
+  [PASS] saved model is the n=200 baseline
+  [PASS] score direction: mean ATTACK score > mean BENIGN score
+  [PASS] score direction: AUC(-decision) == 1 - AUC(decision)
+  [PASS] y_pred convention 0=normal,1=anomaly (matches predict==-1)
+  [PASS] ground-truth labels unchanged
+
+Artifacts
+  models\isolation_forest.pkl
+  models\imputer.pkl
+  models\scaler.pkl
+  models\preprocessing_meta.pkl
+  results\if_test_outputs.npz
+  plots\phase2a/01..06 *.png
+  results\phase2a_frozen_manifest.json  (SHA-256 of every artifact)
+
+PHASE 2A FROZEN — awaiting review. (DBSCAN / PCA / port ablation NOT run.)

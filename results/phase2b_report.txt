@@ -1,0 +1,207 @@
+==============================================================================
+PHASE 2B — DBSCAN (TRANSDUCTIVE DENSITY-BASED ANOMALY DETECTION)
+==============================================================================
+
+1. OBJECTIVE
+  Assess whether density-based clustering separates attack traffic from benign traffic in
+  CIC-IDS2017 by labelling low-density points (DBSCAN noise, label -1) as anomalies, using
+  only unlabelled flow features for every modelling decision.
+
+2. WHY DBSCAN
+  DBSCAN needs no number of clusters, finds arbitrarily shaped dense regions, and has an
+  explicit 'noise' concept: points that are neither core points nor within eps of one.
+  Under the hypothesis that attack flows lie in sparse regions of feature space, noise is
+  a natural binary anomaly indicator.
+
+3. HOW DBSCAN DIFFERS METHODOLOGICALLY FROM ISOLATION FOREST
+  * TRANSDUCTIVE: DBSCAN labels only the rows it is run on. sklearn's DBSCAN has no
+    predict(); there is no trained model to apply to unseen traffic, so these results do
+    not demonstrate out-of-sample generalisation.
+  * Unsupervised over a mixed sample: DBSCAN clusters a uniform random sample that contains
+    both benign and attack rows (labels hidden), rather than learning from benign-only data.
+  * Output is binary (noise vs clustered). No continuous anomaly score is produced, so
+    ROC-AUC is not reported; no score is manufactured from cluster ids.
+  * Distance-based: results depend on the scale of every feature, so standardisation is
+    essential here (a property of DBSCAN's Euclidean neighbourhoods, not a claim about
+    Isolation Forest).
+  * Cost grows with the number of neighbour pairs (roughly quadratic in n for dense data),
+    which forces sampling.
+
+4. SAMPLE CONSTRUCTION
+  Population: 2,522,362 deduplicated rows; attack prevalence 16.88%.
+  Uniform random sample: n = 100,000, random_state = 42 (DataFrame.sample; no first-N, per-file, chronological, balanced or label-based sampling).
+  100k sample: BENIGN 83,289 | ATTACK 16,711 | prevalence 16.71%
+  DOCUMENTED FALLBACK -> working sample n = 50,000: at the selected eps the 100k sample
+  needs 1,221,745,852 stored neighbour pairs (~29.3 GB in sklearn's
+  DBSCAN, measured ~24 B/pair) > 10 GB budget. The 50k rows are the first
+  50,000 rows of the same seeded uniform draw (identical to sample(n=50000, random_state=42)),
+  so the working sample is itself a uniform random sample. The decision used no labels.
+  Working sample: BENIGN 41,665 | ATTACK 8,335 | prevalence 16.67%
+  Category                      population  100k sample   working
+  BENIGN                         2,096,484       83,289    41,665
+  Heartbleed                            11            1         0
+  Infiltration                          36            0         0
+  Bot                                1,953           80        35
+  PortScan                          90,819        3,588     1,830
+  DDoS                             128,016        4,953     2,441
+  DoS Hulk                         172,849        6,842     3,414
+  DoS GoldenEye                     10,286          389       190
+  DoS slowloris                      5,385          246       123
+  DoS Slowhttptest                   5,228          175        86
+  FTP-Patator                        5,933          224       105
+  SSH-Patator                        3,219          118        63
+  Web Attack - Brute Force           1,470           71        38
+  Web Attack - XSS                     652           24        10
+  Web Attack - Sql Injection            21            0         0
+  No rare-attack rows were added. y_dbscan was kept in a sealed container: only these
+  aggregate counts were read before clustering.
+
+5. PREPROCESSING
+  Features: 70 (78 numeric - 8 confirmed zero-variance columns); Destination Port retained.
+  ±inf -> NaN; median imputation; StandardScaler. Imputer and scaler were fitted on the
+  working sample's features only (no labels). The frozen Phase 2A imputer/scaler were NOT
+  reused: they were fitted on BENIGN-only training rows, a label-based selection that would
+  let labels shape DBSCAN's distance metric.
+  Rows with NaN before imputation: 37. Columns constant within the working sample: none.
+  Checks: no NaN, no inf, shape (50000, 70), finite standardized matrix: PASS.
+
+6. k-DISTANCE / eps SELECTION (unsupervised)
+  For each min_samples m, the distance from every point to its m-th nearest neighbour
+  (counting itself, matching sklearn's core-point definition) was sorted and the elbow located
+  with Kneedle. Three variants were computed; the k-distances span ~5 orders of magnitude:
+    min_samples= 5: log10 eps=2.335 @96.7th pct | linear eps=5.639 @99.4th pct | trunc99 eps=0.526 @83.9th pct
+    min_samples=10: log10 eps=2.552 @95.7th pct | linear eps=7.304 @99.4th pct | trunc99 eps=0.781 @84.1th pct
+    min_samples=20: log10 eps=3.219 @95.5th pct | linear eps=7.836 @99.0th pct | trunc99 eps=1.085 @83.8th pct
+  Stability of each rule under label-free perturbations (min_samples=10):
+    log10    full=2.552 trim0.1%=2.061 trim1%=1.990 half-sample=3.335  max/min=1.68
+    linear   full=7.304 trim0.1%=1.805 trim1%=0.781 half-sample=8.147  max/min=10.44
+    trunc99  full=0.781 trim0.1%=0.764 trim1%=0.600 half-sample=1.073  max/min=1.79
+  Selected rule: Kneedle on the log10 k-distance curve. It is invariant to rescaling of
+  distances and is the most stable rule above; the linear rule is set by a handful of extreme
+  points (its eps moves >10x when the top 0.1-1% of points is trimmed), and the truncated rule
+  depends on an arbitrary truncation level. The transition region spans roughly
+  eps 0.78 - 7.30; the chosen eps lies inside it.
+  eps was NOT chosen using precision, recall, F1, accuracy or any label.
+
+7. min_samples SELECTION
+  Candidates [5, 10, 20] were fixed in advance. Primary min_samples = 10: the
+  candidate closest to ln(n) = 10.82, a common data-size heuristic. The 2*dim
+  heuristic (140 for 70 features) was not used: it implies a much larger eps whose neighbour
+  storage is infeasible here; 5 and 20 are reported in the sensitivity analysis.
+
+8. BASELINE DBSCAN RESULTS — standardized 70-D space, eps=2.5522, min_samples=10, Euclidean
+  Clusters (excl. noise): 56
+  Noise points: 1,612 (3.22%)
+  Largest clusters: [36489, 4568, 1933, 1839, 866, 498, 466, 276, 132, 129]
+  Largest cluster share: 73.0% of rows; median cluster size 22
+  Clusters smaller than min_samples: 0; clusters with < 50 rows: 40
+  Neighbour pairs stored: 320,310,172; runtime 15.5 s
+  Evaluation (labels attached AFTER all clustering; noise = predicted anomaly):
+                     Clustered (0)   Noise (1)
+    BENIGN (0)             40,224       1,441
+    ATTACK (1)              8,164         171
+  TP=171 TN=40,224 FP=1,441 FN=8,164
+  Accuracy 0.8079 | Precision 0.1061 | Recall 0.0205 | F1 0.0344 | FPR 0.0346 | FNR 0.9795
+  ROC-AUC: not reported (no continuous anomaly score).
+  These metrics evaluate the noise assignments on the 50,000 sampled rows themselves; they
+  do not demonstrate out-of-sample generalisation.
+
+9. PCA INVESTIGATION (same working rows; PCA fitted without labels)
+  Cumulative explained variance: k=1: 0.216, k=2: 0.319, k=5: 0.529, k=10: 0.719, k=15: 0.841, k=20: 0.917, k=25: 0.967, k=30: 0.989, k=40: 0.999, k=50: 1.000
+  eps re-derived in each space with the same rule (log10-Kneedle, min_samples=10); truncating components shrinks distances, so eps is not transferable.
+  space                      k  cum var     eps  clusters  noise %    Prec  Recall      F1     FPR     FNR  time s
+  standardized 70-D         70    1.000   2.552        56     3.22  0.1061  0.0205  0.0344  0.0346  0.9795    15.5
+  PCA 90%                   19    0.904   1.683        52     3.70  0.1315  0.0292  0.0477  0.0385  0.9708    20.2
+  PCA 95%                   23    0.951   1.813        52     3.73  0.1223  0.0274  0.0447  0.0393  0.9726    20.6
+  PCA 99%                   31    0.991   2.402        58     3.15  0.1036  0.0196  0.0329  0.0338  0.9804    20.3
+  The highest-variance configuration is not assumed to be best; PCA is reported only to show
+  how dimensionality reduction changes local density and cost.
+
+10. PARAMETER SENSITIVITY (descriptive; labels not used to choose anything)
+  min_s     eps     setting  clusters  noise %  Jacc.    Prec  Recall      F1     FPR  time s
+      5   1.276        x0.5       228     6.58  0.438  0.1255  0.0496  0.0711  0.0691     9.1
+      5   1.914       x0.75       135     3.63  0.674  0.0689  0.0150  0.0246  0.0405    13.8
+      5   2.552        x1.0        94     2.27  0.705  0.0555  0.0076  0.0133  0.0258    21.0
+      5   3.190       x1.25        71     1.55  0.481  0.0568  0.0053  0.0097  0.0175    25.9
+      5   3.828        x1.5   not run: memory budget (est. 12.7 GB)
+     10   1.276        x0.5       136     8.51  0.379  0.1610  0.0822  0.1088  0.0857     9.7
+     10   1.914       x0.75        72     5.00  0.645  0.1268  0.0380  0.0585  0.0524    14.2
+     10   2.552        x1.0        56     3.22  1.000  0.1061  0.0205  0.0344  0.0346    15.5  <- primary
+     10   3.190       x1.25        43     2.29  0.712  0.0863  0.0119  0.0209  0.0252    28.4
+     10   3.828        x1.5   not run: memory budget (est. 12.7 GB)
+     20   1.276        x0.5        84    11.00  0.293  0.1959  0.1293  0.1558  0.1062     9.8
+     20   1.914       x0.75        32     6.76  0.477  0.1551  0.0629  0.0895  0.0685    14.4
+     20   2.552        x1.0        28     4.62  0.698  0.1334  0.0370  0.0579  0.0480    22.4
+     20   3.190       x1.25        26     3.24  0.736  0.1360  0.0264  0.0442  0.0336    26.8
+     20   3.828        x1.5   not run: memory budget (est. 12.7 GB)
+      5   2.335   own elbow       100     2.65  0.737  0.0596  0.0095  0.0164  0.0299    19.8
+     20   3.219   own elbow        26     3.20  0.729  0.1377  0.0264  0.0443  0.0331    27.8
+  Noise share across the grid: 1.55% - 11.00%; Jaccard overlap of noise sets with the primary run: 0.293 - 0.737.
+
+11. ATTACK-CATEGORY ANALYSIS — percentage flagged as anomalous (DBSCAN noise)
+  (Not attack classification: DBSCAN does not assign attack types.)
+  Category                           n  flagged  % flagged   95% CI          note
+  DoS Hulk                       3,414       33       1.0%   [  0.7,   1.4]  
+  DDoS                           2,441       32       1.3%   [  0.9,   1.8]  
+  PortScan                       1,830        9       0.5%   [  0.3,   0.9]  
+  DoS GoldenEye                    190       45      23.7%   [ 18.2,  30.2]  
+  DoS slowloris                    123       18      14.6%   [  9.5,  21.9]  
+  FTP-Patator                      105        0       0.0%   [  0.0,   3.5]  
+  DoS Slowhttptest                  86       29      33.7%   [ 24.6,  44.2]  
+  SSH-Patator                       63        0       0.0%   [  0.0,   5.7]  
+  Web Attack - Brute Force          38        4      10.5%   [  4.2,  24.1]  
+  Bot                               35        1       2.9%   [  0.5,  14.5]  
+  Web Attack - XSS                  10        0       0.0%   [  0.0,  27.8]  statistically unstable (n < 30)
+  Infiltration                       0        -          -   -               not present in sample
+  Heartbleed                         0        -          -   -               not present in sample
+  Web Attack - Sql Injection         0        -          -   -               not present in sample
+  Reference: BENIGN rows flagged as noise: 3.46%
+
+12. COMPUTATIONAL COST
+  Working sample 50,000 x 70; brute-force Euclidean neighbourhoods (tree indexes are
+  ineffective in 70 dimensions); n_jobs=-1 on 24 logical CPUs.
+  k-NN for k-distance (k=20): 1.5 s; 100k feasibility k-NN: 5.6 s
+  Primary DBSCAN: 15.5 s, 320,310,172 neighbour pairs (~7.7 GB est.)
+  Clustering runs performed: 17; total script time 7.6 min
+  Process peak working set 8.1 GB; peak committed memory 11.5 GB
+
+13. LIMITATIONS
+  * DBSCAN is TRANSDUCTIVE: noise labels exist only for the clustered rows; no predict() and
+    no evidence of generalisation to unseen traffic.
+  * The experiment uses a representative uniform sample (50,000 rows), not all 2,522,362
+    deduplicated observations; neighbourhood storage grows ~quadratically with n.
+  * Noise assignment is sensitive to eps and min_samples (Section 10); the elbow itself is
+    ill-defined on this heavy-tailed k-distance curve (three reasonable rules disagree).
+  * In 70 dimensions Euclidean distances concentrate and are dominated by heavy-tailed
+    standardized features; local density is harder to estimate reliably.
+  * PCA changes local-density relationships: truncation removes low-variance directions in
+    which some flows may be isolated, so noise sets differ across spaces.
+  * Rare attack categories (e.g. Heartbleed, Infiltration, SQL Injection) are absent or have
+    very few rows in a uniform sample; their percentages are unstable or unavailable.
+  * Median imputation and StandardScaler were fitted on the same rows being clustered
+    (consistent with the transductive design).
+
+14. REPRODUCIBILITY
+  Script: scripts/phase2b.py | random_state=42 | sklearn 1.9.1, numpy 2.5.1, pandas 3.0.5, Python 3.13.14
+  Sample identifiers: results/phase2b_sample_ids.csv (raw concatenation index, source file, file row)
+  Cluster assignments: results/phase2b_cluster_assignments.npz | preprocessing/PCA objects:
+  results/phase2b_preprocessing.pkl | configuration: results/phase2b_config.json
+  Hashes: results/phase2b_manifest.json
+
+SANITY CHECKS
+  [PASS] 1. sample size 100,000 (working sample 100,000 or documented 50,000 fallback)
+  [PASS] 2. random_state == 42
+  [PASS] 3. exactly 70 final features
+  [PASS] 4. Destination Port present
+  [PASS] 5. labels not passed to preprocessing (feature-only fit; leakage check passed)
+  [PASS] 6. labels not passed to PCA
+  [PASS] 7. labels not passed to DBSCAN (all runs before label reveal)
+  [PASS] 8. no NaN in DBSCAN input
+  [PASS] 9. no inf in DBSCAN input
+  [PASS] 10. cluster -1 -> anomaly 1
+  [PASS] 11. all other cluster ids -> 0
+  [PASS] 12. evaluation only after clustering
+  [PASS] 13. no Phase 2A artifact modified
+  [PASS] 14. DBSCAN marked transductive
+
+PHASE 2B COMPLETE — awaiting review. (No port ablation, no DBSCAN-vs-IF comparison.)

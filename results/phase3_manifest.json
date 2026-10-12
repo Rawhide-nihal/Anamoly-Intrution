@@ -1,0 +1,41 @@
+{
+  "phase": "3",
+  "created": "2026-10-02 15:13:25",
+  "frozen_manifests_verified": {
+    "2A": "6a0fa67c7c7a2c75e17bb73502b7829a5ba98ccf2bd33d14f1bc9ece6855ca5d",
+    "2B": "8ca80daf2567cc869a950bbbc02f6671314f509f5e2435ea6e99b6379d992a9d",
+    "2C": "8ab1e3a9578654f6a008707f7ad6b96dd990c9a0ed2da21b676a3af7ac99f5f8"
+  },
+  "source_artifact_sha256": {
+    "results/phase2a_metrics.json": "fce9acb54eadeeac4eac6646e54b91979c276cf2ab3032f1b40fa9f9ca9f6866",
+    "results/if_test_outputs.npz": "3b502eedd322fbb39cdc2d313669b1554d3aca7f33e6c50c82d9ae5cab008775",
+    "results/phase2b_metrics.json": "8089f07e74072d6baa6128286e2ea36f0fbedbd3039dc46b04519262158ed1f2",
+    "results/phase2b_config.json": "0aabbaceeff0c4c32e03057fa7514a63028f65771a3bd1c6ee148e4b279a9007",
+    "results/phase2c_metrics.json": "ee15dea3ef9e00e06117aa4a9ccf2d3a1c723872bb48ddc92327bed412be5c09",
+    "results/phase2c_config.json": "d35e3ad9478086a0df279d2e8ebdb826533f15f8d94359b959b705a13be0e1c7"
+  },
+  "sha256": {
+    "results/phase3_final_report.txt": "5e80ac9dbc22de6b3b26991ea31f542e6d4ae04f8978aa7094e6f556b1c3c312",
+    "results/phase3_comparison.json": "3f81f2197018f6c27a9d69f4b161863802341855fc4affb9f6211f852226e91d",
+    "scripts/phase3.py": "9413ca81e10cea58b09ecd5673b8a2dfeffe4b3fbcea994af25dad07f65235c6",
+    "results/phase3_tables/all_tables.md": "2820a8533bb42601c6d06fdc7b9e06e0bbf1ee600cb199aeb34d3a9d9464b6f1",
+    "results/phase3_tables/T01_populations.csv": "43d5a0e3f7837c035fe5084f9ffe8ae636afc804a6137ec1343d1f2abe878f20",
+    "results/phase3_tables/T02_configurations.csv": "284e1ef053b43e0b56a3e14f7b68beef0b60712b8f900f1b60e9feab612c9a1b",
+    "results/phase3_tables/T03_performance.csv": "bd642aeb809a8054c62c05f8b9ca75911aa8519e83fd91d10d89cfae2f1ea6d7",
+    "results/phase3_tables/T04_confusion.csv": "ea7ad5f9c90a9076ac957990c25cfe5a528f47821eb1b19021ee8184ec76ef0c",
+    "results/phase3_tables/T05_attack_categories.csv": "11b2ad7d615293fa839b5d757bed7e5796efadaaad3254e5dfc1aefd46c8ab26",
+    "results/phase3_tables/T06_port_ablation.csv": "70e98c3bedf257f3fd54766d442c5da68672b71a697f3b0e8d4f7609d9f131fa",
+    "results/phase3_tables/T07_pca.csv": "48878adcf954a0033c5a6ca160e0569b3ab5aedbc711d2516339b09abc33653b",
+    "results/phase3_tables/T08_sensitivity.csv": "6797305709a6b6d3bdb5932fd8af4d0e9be0985b6606807427a63c7e3c3708e5",
+    "results/phase3_tables/T09_computation.csv": "80ea6a85fb2a4b64179ae7029e789fa6f885b6bb891d644e2f2b24b4d9c79167",
+    "results/phase3_tables/T10_methodology.csv": "cd93db2baa63e1c1688883b4b56aec91b121fa7beb6082972473e6508556a81a",
+    "plots/phase3/01_confusion_matrices.png": "00dc5b2089b9e33db84478933e8432c271d98b4ddda8bfd48e9fdf22b1c8f96b",
+    "plots/phase3/02_precision_recall_f1.png": "e3a95f723197f9cda5dcba857549061d6992dd7ca139b4952c5a2afc887641c7",
+    "plots/phase3/03_fpr_fnr.png": "32ea8338b56ec08123feb05e55d30b52aa8887055240faced1666e3ff4ceb6c6",
+    "plots/phase3/04_roc_isolation_forest.png": "991b9a1b20ffec467610181daca9eb55d636fe8e3c33e21ac591976bef49e123",
+    "plots/phase3/05_attack_category_profile.png": "1435be07723e995e94642f54ff0597e3a4c4515c88a5bf0bda08b440b2c8426e",
+    "plots/phase3/06_destination_port_ablation.png": "536db842c35613c4bd6b847fb8fc31ebe2de4a7e5780858d7bb205e673c5482f",
+    "plots/phase3/07_dbscan_parameter_sensitivity.png": "d4de44cc296905aac6393e2dd6c14290f93e831277054d70948d44744178295f",
+    "plots/phase3/08_dbscan_cluster_composition.png": "ecf2dc41e5b12b3ed4a634e692c0954c8722ab45a037b0095e0c0d78ad542ad1"
+  }
+}

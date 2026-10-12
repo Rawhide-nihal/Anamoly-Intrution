@@ -1,0 +1,265 @@
+============================================================================================
+PHASE 3 — FINAL SYNTHESIS: ISOLATION FOREST AND DBSCAN FOR ANOMALY-BASED INTRUSION DETECTION
+CIC-IDS2017 | all values read from frozen Phase 2A/2B/2C artifacts (hash-verified); no model rerun
+============================================================================================
+
+1. EXECUTIVE SUMMARY
+  * Isolation Forest, trained only on BENIGN flows, reached ROC-AUC 0.8082, precision 0.8387, recall 0.5789 and F1 0.6850 on an unseen test set of 1,054,824 rows.
+  * DBSCAN, run transductively on a 50,000-row representative sample, labelled 3.22% of rows as
+    density noise; 2.05% of the sample's attack rows were noise (precision 0.1061).
+  * Post-hoc, 41.0% of DBSCAN's attack rows sat in 11 attack-dominated clusters and 56.1% in mixed clusters:
+    many attacks are dense, not sparse, in this feature space.
+  * PCA (19/23/31 components) and removing Destination Port did not materially change DBSCAN's low
+    attack recall; removing Destination Port changed Isolation Forest only modestly.
+  * The two algorithms operationalise 'anomaly' differently, which explains much of their different behaviour.
+  * Isolation Forest was evaluated on an unseen test population after being trained exclusively on BENIGN traffic, whereas DBSCAN was evaluated transductively on a representative mixed sample. Therefore, their raw metric values should be interpreted within their respective experimental designs rather than as a direct apples-to-apples benchmark.
+
+2. DATASET
+  CIC-IDS2017 (8 CSV files, 78 numeric features + Label). Exact duplicate rows removed ->
+  2,522,362 rows (BENIGN 2,096,484; ATTACK 425,878; prevalence 16.88%). ±inf -> NaN.
+  8 zero-variance columns removed -> 70 features (Destination Port retained). 14 attack categories.
+  TABLE 1 — Dataset and experimental populations
+                       Item                                 Isolation Forest                                                                     DBSCAN
+    Deduplicated population                                   2,522,362 rows                                                             2,522,362 rows
+           Rows used to fit                         1,467,538 BENIGN (TRAIN)                                          50,000 mixed rows (labels hidden)
+             Rows evaluated                       1,054,824 unseen TEST rows                                        the same 50,000 rows (transductive)
+           BENIGN evaluated                                          628,946                                                                     41,665
+           ATTACK evaluated                                          425,878                                                                      8,335
+          Attack prevalence                                           40.37%                                                                     16.67%
+                  Selection seeded 70/30 permutation of BENIGN + all attacks uniform random sample, random_state=42 (50k fallback of 100k draw: memory)
+
+3. EXPERIMENTAL METHODOLOGY
+  Isolation Forest (Phase 2A): seeded 70/30 split of BENIGN rows; TRAIN = BENIGN only; TEST = remaining BENIGN +
+  all attacks. Median imputer and StandardScaler fitted on TRAIN. Pre-specified configuration; contamination and
+  tree-count variations were reported only as sensitivity analyses.
+  DBSCAN (Phase 2B): uniform random sample (random_state=42); 100k rows were infeasible at the selected eps
+  (~29.3 GB of neighbour storage vs a 10 GB budget), so the documented 50k fallback (first half of
+  the same draw) was used. Imputer/scaler fitted on the sample; eps chosen by Kneedle on the log10 k-distance
+  curve and min_samples as the candidate closest to ln(n); labels sealed until all clustering finished.
+  Phase 2C removed only Destination Port and repeated each primary procedure unchanged.
+  TABLE 2 — Primary algorithm configurations
+                    Setting                                                                  Isolation Forest                                                                     DBSCAN
+                  Algorithm                                                           sklearn IsolationForest                                          sklearn DBSCAN (Euclidean, brute)
+                   Features                                                    70 (Destination Port retained)                                             70 (Destination Port retained)
+              Preprocessing                     inf->NaN, median impute, StandardScaler (fit on BENIGN TRAIN)            inf->NaN, median impute, StandardScaler (fit on the 50k sample)
+             Key parameters n_estimators=200, max_samples='auto' (256), contamination='auto', random_state=42                                                  eps=2.552, min_samples=10
+    How parameters were set                                                            pre-specified baseline log10-Kneedle on k-distance curve; min_samples closest to ln(n); no labels
+           Anomaly decision                                                            -decision_function > 0                                                cluster label == -1 (noise)
+
+  TABLE 3 — Primary performance results
+                Measure                             Isolation Forest                                                               DBSCAN
+      Training paradigm                       trained on BENIGN only                            unsupervised clustering of a mixed sample
+    Evaluation paradigm              out-of-sample (unseen test set)                                   transductive (same rows clustered)
+               Features                                           70                                                                   70
+        Evaluation size                                    1,054,824                                                               50,000
+              Precision                                       0.8387                                                               0.1061
+                 Recall                                       0.5789                                                               0.0205
+                     F1                                       0.6850                                                               0.0344
+                    FPR                                       0.0754                                                               0.0346
+                    FNR                                       0.4211                                                               0.9795
+                ROC-AUC                                       0.8082                                 not applicable (binary noise output)
+                Runtime                   fit 0.95 s; predict 5.33 s                                          15.5 s (one clustering run)
+                 Memory peak process 5.9 GB (data loading dominates) ~7.7 GB est. neighbour storage; process peak 8.1 GB over all 2B runs
+
+  Isolation Forest was evaluated on an unseen test population after being trained exclusively on BENIGN traffic, whereas DBSCAN was evaluated transductively on a representative mixed sample. Therefore, their raw metric values should be interpreted within their respective experimental designs rather than as a direct apples-to-apples benchmark.
+  No overall score or ranking is computed.
+
+4. ISOLATION FOREST
+  TABLE 4 — Confusion matrices (rows: truth; populations differ)
+           Algorithm          Population     TN    FP     FN     TP
+    Isolation Forest 1,054,824 test rows 581525 47421 179318 246560
+              DBSCAN  50,000 sample rows  40224  1441   8164    171
+  Isolation Forest flagged 246,560 of 425,878 attack rows (57.9%) while raising false alarms on
+  47,421 of 628,946 unseen BENIGN rows (7.54%); 179,318 attack rows were not flagged. Its
+  continuous score ranks attacks above benign traffic with ROC-AUC 0.8082. Flag rates were high for several
+  high-volume DoS categories (DoS Hulk 89.3%, DDoS 62.0%, DoS Slowhttptest 82.1%, DoS slowloris 57.7%, DoS GoldenEye 49.1%)
+  and near zero for PortScan, FTP-/SSH-Patator, Bot and the web attacks.
+
+5. DBSCAN
+  Primary: eps=2.552 (the primary unsupervised eps selected by the predefined parameter-selection
+  procedure — not an 'optimal' eps), min_samples=10; 56 clusters, 1,612 noise rows (3.22%), largest cluster 36,489 rows.
+  DBSCAN produced relatively few false positives (1,441 of 41,665 BENIGN rows, FPR 0.0346) but
+  8,164 of 8,335 attack rows in its sample were assigned to clusters rather than noise (FNR 0.9795).
+  Post-hoc cluster composition (frozen sample; diagnostic only, not used for any selection):
+    41.0% of attack rows in 11 highly attack-dominated clusters (>=95% attack)
+    56.1% in 4 mixed clusters (5-95% attack), chiefly the largest cluster (36,489 rows, 87.7% BENIGN)
+    0.8% in benign-dominated clusters (<=5% attack); 2.1% in noise
+  These figures describe this experiment's sample and parameters and are not generalised beyond it.
+
+  TABLE 5 — Attack-category behaviour: % flagged as anomalous (not attack-type classification accuracy)
+               Attack category   IF n  IF % flagged as anomalous                  IF note    DBSCAN n DBSCAN % flagged as anomalous                   DBSCAN note
+                      DoS Hulk 172849                      89.28                                 3414                          0.97                              
+                          DDoS 128016                      62.03                                 2441                          1.31                              
+                      PortScan  90819                       0.24                                 1830                          0.49                              
+                 DoS GoldenEye  10286                      49.12                                  190                         23.68                              
+                 DoS slowloris   5385                      57.72                                  123                         14.63                              
+              DoS Slowhttptest   5228                      82.06                                   86                         33.72                              
+                   FTP-Patator   5933                       0.00                                  105                           0.0                              
+                   SSH-Patator   3219                       0.00                                   63                           0.0                              
+                           Bot   1953                       2.25                                   35                          2.86                              
+      Web Attack - Brute Force   1470                       4.97                                   38                         10.53                              
+              Web Attack - XSS    652                       2.45                                   10                           0.0 statistically unstable (n<30)
+                  Infiltration     36                      83.33 small n (<100): unstable Not present                   Not present                              
+    Web Attack - Sql Injection     21                       0.00 small n (<100): unstable Not present                   Not present                              
+                    Heartbleed     11                     100.00 small n (<100): unstable Not present                   Not present                              
+  Isolation Forest showed substantially higher flagging rates for the high-volume DoS categories (DoS Hulk, DDoS,
+  GoldenEye, slowloris, Slowhttptest), while DBSCAN generally assigned those observations to clusters rather than
+  noise (its highest rates were the slower DoS variants and Web Attack - Brute Force). Both flagged almost none of the
+  FTP-/SSH-Patator or PortScan rows. Heartbleed (11), Infiltration (36) and SQL Injection (21) have too few rows for
+  stable Isolation Forest estimates and are absent from the DBSCAN sample; XSS (10 in the sample) is unstable.
+
+6. DESTINATION PORT ABLATION (Phase 2C)
+  The analysis treated Destination Port as a legitimate network-flow feature and investigated its influence through
+  ablation. It has 53,805 unique values, median 80, 1,567 zero-port rows; ports 53, 80 and 443 cover
+  74.9% of rows, and 76.1% of attack rows target port 80.
+  TABLE 6 — Destination Port ablation
+           Algorithm                              Measure WITH Port (70) WITHOUT Port (69)                          Delta
+    Isolation Forest                            Precision         0.8387            0.8273                        -0.0114
+    Isolation Forest                               Recall         0.5789            0.5677                        -0.0113
+    Isolation Forest                                   F1         0.6850            0.6733                        -0.0117
+    Isolation Forest                                  FPR         0.0754            0.0802                        +0.0048
+    Isolation Forest                                  FNR         0.4211            0.4323                        +0.0113
+    Isolation Forest                              ROC-AUC         0.8082            0.8140                        +0.0058
+    Isolation Forest Score Pearson / prediction agreement                                  0.997 / 98.8% (12,197 changed)
+              DBSCAN         eps (re-selected, same rule)          2.552             3.100                         +0.547
+              DBSCAN                             Clusters             56                44                            -12
+              DBSCAN                              Noise %           3.22              2.30                       -0.93 pp
+              DBSCAN                            Precision         0.1061            0.0880                        -0.0181
+              DBSCAN                               Recall         0.0205            0.0121                        -0.0084
+              DBSCAN                                   F1         0.0344            0.0213                        -0.0131
+              DBSCAN                                  FPR         0.0346            0.0251                        -0.0095
+              DBSCAN                                  FNR         0.9795            0.9879                        +0.0084
+              DBSCAN     Noise-set Jaccard / rows changed                                                     0.712 / 464
+              DBSCAN        Feature-identical rows in 50k              0             2,872                               
+  Isolation Forest: removing the port changed F1 by -0.0117 and ROC-AUC by +0.0058; per-row scores correlate at
+  0.997 and 98.8% of predictions were unchanged — a modest effect.
+  DBSCAN: removing the port did not change the basic behaviour — most attack rows still occurred inside clusters
+  (39.8% attack-dominated, 58.1% mixed, 1.2% noise). Every WITHOUT-Port noise row
+  was also noise WITH Port (Jaccard 0.712).
+  The DBSCAN ablation uses independently selected eps values in each feature space, so it measures the effect of
+  removing Destination Port under the complete unsupervised DBSCAN procedure rather than a pure feature effect at a
+  fixed eps. Removing the port made 2,872 sample rows feature-identical; they were retained because
+  deduplicating them would introduce an additional preprocessing change.
+
+7. PCA ANALYSIS (Phase 2B)
+  TABLE 7 — DBSCAN PCA analysis (same 50,000 rows; eps re-derived in each space by the same rule)
+                    Space  Components  Cum. variance   eps  Clusters  Noise %  Precision  Recall     F1  Runtime s
+    Standardized (no PCA)          70         1.0000 2.552        56     3.22     0.1061  0.0205 0.0344       15.5
+                  PCA 90%          19         0.9040 1.683        52     3.70     0.1315  0.0292 0.0477       20.2
+                  PCA 95%          23         0.9509 1.813        52     3.73     0.1223  0.0274 0.0447       20.6
+                  PCA 99%          31         0.9908 2.402        58     3.15     0.1036  0.0196 0.0329       20.3
+  Within the tested configurations, PCA did not materially change DBSCAN's low attack recall (all < 3%); noise
+  stayed between 3.15% and 3.73%. Runtime was ~15.5 s without PCA and ~20 s with PCA. This does not show that
+  PCA is ineffective in general.
+
+8. PARAMETER SENSITIVITY (Phase 2B)
+  TABLE 8 — DBSCAN parameter sensitivity
+     min_samples   eps   setting                 status clusters noise % Jaccard vs primary  recall  est. memory GB
+               5 1.276      x0.5                    run      228    6.58              0.438  0.0496             4.7
+               5 1.914     x0.75                    run      135    3.63              0.674   0.015             6.6
+               5 2.552      x1.0                    run       94    2.27              0.705  0.0076             7.7
+               5 3.190     x1.25                    run       71    1.55              0.481  0.0053             9.2
+               5 3.828      x1.5 not run: memory budget                                                        12.7
+              10 1.276      x0.5                    run      136    8.51              0.379  0.0822             4.7
+              10 1.914     x0.75                    run       72     5.0              0.645   0.038             6.6
+              10 2.552      x1.0          run (primary)       56    3.22                1.0  0.0205             7.7
+              10 3.190     x1.25                    run       43    2.29              0.712  0.0119             9.2
+              10 3.828      x1.5 not run: memory budget                                                        12.7
+              20 1.276      x0.5                    run       84    11.0              0.293  0.1293             4.7
+              20 1.914     x0.75                    run       32    6.76              0.477  0.0629             6.6
+              20 2.552      x1.0                    run       28    4.62              0.698   0.037             7.7
+              20 3.190     x1.25                    run       26    3.24              0.736  0.0264             9.2
+              20 3.828      x1.5 not run: memory budget                                                        12.7
+               5 2.335 own elbow                    run      100    2.65              0.737  0.0095             7.4
+              20 3.219 own elbow                    run       26     3.2              0.729  0.0264             9.3
+  Noise ranged 1.55%-11.00% and the Jaccard overlap with the primary noise set 0.29-0.74. The k-distance curve spans
+  about five orders of magnitude and standard elbow rules disagreed (min_samples=10: log10 2.55, linear 7.30, truncated 0.78).
+  DBSCAN's noise assignments are sensitive to density parameters in this feature space; eps=2.552 is the primary
+  unsupervised eps selected by the predefined parameter-selection procedure.
+
+9. COMPARATIVE ANALYSIS
+  Anomaly definitions. Isolation Forest: an observation is anomalous when it is relatively easy to isolate through
+  randomised tree partitioning. DBSCAN: an observation is anomalous only when it is assigned to density noise (-1).
+  Consequences observed here: attacks can receive high Isolation Forest scores even when they belong to dense
+  traffic patterns (e.g. DoS Hulk, flagged at 89.3%). This is consistent with the forest being fitted on
+  BENIGN data only, where such patterns are rare, whereas DBSCAN, run on a mixed sample, found the same high-volume
+  attacks forming dense groups (DoS Hulk 1.0% noise) and so did not label them noise. In short, 'attack' != 'DBSCAN noise', while an attack can still receive a
+  high Isolation Forest anomaly score — a central finding of this project.
+  TABLE 10 — Methodological comparison
+                       Property                                                 Isolation Forest                                                    DBSCAN
+             Anomaly definition easy to isolate by random partitions (short average path length) density noise: not a core point and not within eps of one
+                  Training data                                                      BENIGN only                                   unlabelled mixed sample
+            Unseen observations                          predict()/decision_function on new rows               no standard sklearn predict(); transductive
+                         Output                                     continuous score + threshold                                 binary noise / cluster id
+                   ROC analysis                                                      yes (score)                                        no intrinsic score
+    Parameter sensitivity shown                        2A: n=200 cross-seed score Spearman 0.991                             noise 1.55-11.00% across grid
+               Scale dependence                                               per-feature splits            Euclidean distances; standardisation essential
+  Generalisation and deployment characteristics demonstrated by this implementation:
+    Isolation Forest — trained on BENIGN traffic; predicts unseen observations; continuous score with a threshold for
+    the binary decision; supports ROC analysis; evaluated on a separate test set.
+    DBSCAN — clusters the supplied sample directly; no standard sklearn predict() for unseen observations; noise
+    assignment is sample-dependent; no intrinsic continuous score; eps/min_samples materially influence results;
+    the primary experiment is transductive. (Adaptations for deployment exist but were not evaluated here.)
+
+10. COMPUTATIONAL ANALYSIS
+  TABLE 9 — Computational characteristics
+                    Aspect                             Isolation Forest                                                            DBSCAN
+            Rows processed               fit 1,467,538; score 1,054,824                         50,000 (clustered once per configuration)
+        Fit / cluster time                0.95 s (200 trees x 256 rows)                              15.5 s primary; PCA runs 20.2-20.6 s
+                Prediction             5.33 s for 1,054,824 unseen rows                no predict(); labels exist only for clustered rows
+      Dominant memory cost           data loading (peak 5.9 GB process)               neighbour storage: 320,310,172 pairs (~7.7 GB est.)
+    Scaling limit observed                                 none reached 100k rows needed ~29.3 GB (> 10 GB budget); 1.5x eps runs skipped
+          Saved model size 0.36 MB (frozen 200-tree pickle, compressed)                               n/a (cluster labels for the sample)
+  The runtimes are not directly equivalent: the algorithms processed different populations in different workflows.
+  Isolation Forest's cost is fitting 200 trees on 256-row subsamples plus a linear-time scoring pass over unseen rows.
+  DBSCAN's cost here is dominated by storing every eps-neighbourhood; with dense regions this grows roughly with the
+  square of the sample size, which is why 100,000 rows exceeded the ~10 GB budget and some sensitivity settings were
+  skipped. Neither algorithm is claimed to be computationally better in general.
+
+11. LIMITATIONS
+   1. CIC-IDS2017 is a benchmark/testbed dataset and may not represent production traffic.
+   2. The DBSCAN experiment used 50,000 observations because the 100,000-row configuration exceeded the available memory budget.
+   3. Isolation Forest and DBSCAN were evaluated under different experimental paradigms.
+   4. DBSCAN is transductive in this implementation.
+   5. DBSCAN is sensitive to eps and min_samples.
+   6. High-dimensional distance structure affects DBSCAN.
+   7. PCA changes local-density geometry.
+   8. Rare attack categories have unstable detection estimates.
+   9. The test attack prevalence (40.4%) is not intended to represent real-world traffic prevalence.
+  10. Destination Port was investigated by ablation but not declared leakage.
+  11. The experiments evaluate binary anomaly detection rather than attack-type classification.
+  12. No real-time production deployment was evaluated.
+  13. No external dataset validation was performed.
+
+12. RESEARCH-QUESTION ANSWERS
+  RQ1 — Can Isolation Forest detect anomalous traffic when trained only on BENIGN observations?
+    Yes, partially. On the unseen test set it reached ROC-AUC 0.8082, precision 0.8387, recall 0.5789, F1 0.6850
+    (TP 246,560, FP 47,421, FN 179,318, TN 581,525). Detection was uneven across categories: high for
+    volumetric DoS traffic, near zero for PortScan, brute-force (Patator), Bot and web attacks.
+  RQ2 — Can DBSCAN identify anomalous traffic by treating low-density observations as noise?
+    Only to a very limited extent in this experiment: 3.22% of the sample was noise, with precision 0.1061, recall 0.0205, F1 0.0344.
+    Most attack rows were in dense clusters (41.0% attack-dominated, 56.1% mixed). Noise share varied 1.55-11.00%
+    across the sensitivity grid, so the result depends on the density parameters; no tested setting changed the
+    picture of low attack recall (max recall in the grid 0.129).
+  RQ3 — How does Destination Port affect the two algorithms?
+    Modestly. Isolation Forest: F1 0.6850 -> 0.6733, ROC-AUC 0.8082 -> 0.8140, score correlation 0.997.
+    DBSCAN (eps re-selected 2.552 -> 3.100): noise 3.22% -> 2.30%, recall 0.021 -> 0.012;
+    attacks remained predominantly inside clusters. The largest category-level change was DoS GoldenEye, which moved
+    in opposite directions for the two algorithms.
+  RQ4 — How do the algorithms differ in anomaly-detection behaviour?
+    Isolation vs density: Isolation Forest scores how easily a flow separates from BENIGN-trained partitions; DBSCAN
+    asks whether a flow lies in a sparse region of the mixed sample. Out-of-sample vs transductive: Isolation Forest
+    scored 1,054,824 unseen rows; DBSCAN labelled only the 50,000 rows it clustered. Continuous vs binary: Isolation
+    Forest supports ROC analysis; DBSCAN gives noise/cluster only. Computation: Isolation Forest's cost was small and
+    linear in scored rows; DBSCAN's neighbour storage limited the sample size. Category behaviour: high-volume DoS
+    traffic was largely flagged by Isolation Forest but clustered by DBSCAN.
+
+13. FINAL CONCLUSION
+  Isolation Forest produced meaningful anomaly separation under the BENIGN-only training formulation, with ROC-AUC
+  0.8082 and F1 0.6850 on its frozen unseen test set. DBSCAN identified a small fraction of observations as
+  density noise, but only 2.05% of attack observations in its primary sample were flagged as noise. Post-hoc
+  cluster analysis showed that many attacks occurred inside dense clusters rather than as isolated observations. PCA
+  did not materially change this DBSCAN behaviour, and Destination Port removal produced only modest changes in the
+  Isolation Forest results and did not resolve DBSCAN's low attack recall. The algorithms therefore exhibit different
+  anomaly-detection behaviour because they operationalise 'anomaly' differently. These conclusions are specific to
+  CIC-IDS2017 and to the frozen experimental designs described above.

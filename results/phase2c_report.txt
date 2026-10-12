@@ -1,0 +1,220 @@
+================================================================================
+PHASE 2C — DESTINATION PORT ABLATION (feature ablation; not model optimisation)
+================================================================================
+Reference baselines (WITH Port) are the frozen Phase 2A Isolation Forest and frozen Phase 2B DBSCAN
+results; they were read, not rerun. Only Destination Port is removed.
+
+1. FEATURE ABLATION
+  Feature name: 'Destination Port' (present in the frozen 70-feature list: yes)
+  WITH Port: 70 features | WITHOUT Port: 69 features | difference: ['Destination Port'] only
+  Exact lists: results/phase2c_feature_lists.json
+
+2. DESTINATION PORT — DESCRIPTIVE ANALYSIS (deduplicated data, exploratory only)
+  Rows 2,522,362 | unique values 53,805 | min 0 | max 65,535 | median 80 | zero-port rows 1,567
+  Most frequent ports: 53 (34.8%), 80 (21.5%), 443 (18.7%), 123 (0.8%), 22 (0.4%), 21 (0.4%), 389 (0.2%), 88 (0.2%), 137 (0.1%), 465 (0.1%)
+  Top 5 ports cover 76.2% of rows; top 10 cover 77.2%.
+  BENIGN: rows 2,096,484 | unique 53,802 | median 80 | top-5 share 76.0% | <1024 77.6% | >=49152 14.2%
+          top ports: 53 (41.8%), 443 (22.4%), 80 (10.4%), 123 (1.0%), 22 (0.3%)
+  ATTACK: rows 425,878 | unique 1,690 | median 80 | top-5 share 78.8% | <1024 81.7% | >=49152 1.3%
+          top ports: 80 (76.1%), 21 (1.4%), 22 (0.8%), 8080 (0.3%), 139 (0.0%)
+  Per attack category, most common port (share of that category's rows):
+    Heartbleed                   n=     11  unique=     1  top port 444 (100.0%)
+    Infiltration                 n=     36  unique=     1  top port 444 (100.0%)
+    Bot                          n=  1,953  unique=   706  top port 8080 (63.9%)
+    PortScan                     n= 90,819  unique= 1,000  top port 80 (0.4%)
+    DDoS                         n=128,016  unique=     4  top port 80 (100.0%)
+    DoS Hulk                     n=172,849  unique=     1  top port 80 (100.0%)
+    DoS GoldenEye                n= 10,286  unique=     1  top port 80 (100.0%)
+    DoS slowloris                n=  5,385  unique=     1  top port 80 (100.0%)
+    DoS Slowhttptest             n=  5,228  unique=     1  top port 80 (100.0%)
+    FTP-Patator                  n=  5,933  unique=     2  top port 21 (100.0%)
+    SSH-Patator                  n=  3,219  unique=     1  top port 22 (100.0%)
+    Web Attack - Brute Force     n=  1,470  unique=     1  top port 80 (100.0%)
+    Web Attack - XSS             n=    652  unique=     1  top port 80 (100.0%)
+    Web Attack - Sql Injection   n=     21  unique=     1  top port 80 (100.0%)
+  Destination Port is a categorical identifier stored as an integer: as a numeric feature it
+  imposes an arbitrary ordering/distance (port 80 is 'close' to 81, far from 8080). Its
+  association with attack categories reflects the CIC-IDS2017 testbed (which services were
+  attacked); this descriptive association alone is not evidence of label leakage.
+
+3. ISOLATION FOREST WITHOUT DESTINATION PORT
+  Rows: exact frozen Phase 2A split — TRAIN 1,467,538 BENIGN; TEST 628,946 BENIGN + 425,878 ATTACK (verified: refit 70-feature preprocessing stats bit-identical; frozen model
+  reproduces the frozen per-row test scores).
+  Preprocessing: ±inf->NaN, median imputer + StandardScaler refit on BENIGN TRAIN (69 features);
+  test transformed with the train-fitted artifacts.
+  Model: IsolationForest(n_estimators=200, max_samples='auto', contamination='auto', random_state=42, n_jobs=-1)
+  No contamination or tree-count experiments were run.
+  TP=241,756 TN=578,486 FP=50,460 FN=184,122
+  Accuracy 0.7776 | Precision 0.8273 | Recall 0.5677 | F1 0.6733 | FPR 0.0802 | FNR 0.4323 | ROC-AUC 0.8140 (anomaly_score = -decision_function)
+  Training 0.93 s | predict() 5.28 s | decision_function 5.23 s | peak RAM at this stage 7.4 GB working set (8.9 GB committed) | features 69
+
+4. ISOLATION FOREST ABLATION COMPARISON (paired: same 1,054,824 test rows)
+                       WITH Port  WITHOUT Port   delta (W/O - W)
+  Features                    70            69                -1
+  Precision               0.8387        0.8273     -0.0114 (-1.14 pp)
+  Recall                  0.5789        0.5677     -0.0113 (-1.13 pp)
+  F1                      0.6850        0.6733     -0.0117 (-1.17 pp)
+  FPR                     0.0754        0.0802     +0.0048 (+0.48 pp)
+  FNR                     0.4211        0.4323     +0.0113 (+1.13 pp)
+  ROC-AUC                 0.8082        0.8140           +0.0058
+  Training (s)              0.95          0.93
+  Prediction (s)            5.33          5.28   (timings from separate runs)
+  Pearson(anomaly_score) 0.9973 | Spearman 0.9909 | prediction agreement 98.8437%
+  Rows whose prediction changed: 12,197 (5,216 normal->anomaly, 6,981 anomaly->normal)
+    BENIGN: 3,611 newly flagged, 572 no longer flagged
+    ATTACK: 1,605 newly flagged, 6,409 no longer flagged
+  These deltas describe the effect of the feature; they are not a model-selection result.
+
+5. ISOLATION FOREST — PERCENTAGE FLAGGED AS ANOMALOUS BY CATEGORY (Phase 2A test set)
+  Category                            n   WITH %    W/O %    change  note
+  DoS Hulk                      172,849    89.28    88.32    -0.96pp  
+  DDoS                          128,016    62.03    58.60    -3.42pp  
+  PortScan                       90,819     0.24     0.23    -0.01pp  
+  DoS GoldenEye                  10,286    49.12    60.19   +11.07pp  notable
+  FTP-Patator                     5,933     0.00     0.00    +0.00pp  
+  DoS slowloris                   5,385    57.72    59.11    +1.39pp  
+  DoS Slowhttptest                5,228    82.06    82.59    +0.54pp  
+  SSH-Patator                     3,219     0.00     0.00    +0.00pp  
+  Bot                             1,953     2.25     2.25    +0.00pp  
+  Web Attack - Brute Force        1,470     4.97     4.97    +0.00pp  
+  Web Attack - XSS                  652     2.45     2.45    +0.00pp  
+  Infiltration                       36    83.33    86.11    +2.78pp  small n (<100): unstable
+  Web Attack - Sql Injection         21     0.00     0.00    +0.00pp  small n (<100): unstable
+  Heartbleed                         11   100.00   100.00    +0.00pp  small n (<100): unstable
+  BENIGN test rows flagged: WITH 7.54% | WITHOUT 8.02%
+
+6. DBSCAN WITHOUT DESTINATION PORT — SAMPLE AND PREPROCESSING
+  Same 50,000 rows as frozen Phase 2B (results/phase2b_sample_ids.csv; verified against a fresh seeded
+  draw, source file/row, frozen assignment file and bit-identical refit 70-feature preprocessing stats).
+  Median imputer + StandardScaler refit on the 50k sample (69 features). Labels sealed until clustering ended.
+
+7. DBSCAN eps SELECTION WITHOUT PORT (identical unsupervised procedure to Phase 2B)
+  min_samples= 5: log10 eps=2.337 @96.8th pct | linear eps=5.639 @99.4th pct | trunc99 eps=0.481 @83.7th pct
+  min_samples=10: log10 eps=3.100 @96.9th pct | linear eps=7.299 @99.4th pct | trunc99 eps=0.708 @83.8th pct
+  min_samples=20: log10 eps=3.892 @96.7th pct | linear eps=7.797 @99.0th pct | trunc99 eps=0.965 @83.1th pct
+  Rule robustness WITHOUT Port (min_samples=10): log10 max/min=3669312.03; linear max/min=11.54; trunc99 max/min=2.49
+  Selected: min_samples=10 (candidate closest to ln(n)=10.82), eps=3.0996
+  (log10-Kneedle). eps 2.552 was NOT reused; no label, metric or prevalence informed the choice.
+  Elbow clarity, min_samples=10           WITH Port   WITHOUT Port
+    eps log10 / linear / trunc99        2.55/7.30/0.78      3.10/7.30/0.71
+    rule disagreement (linear/trunc99)       9.36          10.31
+    log10 rule stability (max/min)           1.68     3669312.03
+    log10 knee strength (max chord gap)     0.271          0.218
+    feature-identical rows in the 50k           0          2,872
+    rows with zero 10-NN distance                0          1,205
+  Assessment: the elbow is ambiguous in BOTH spaces — the three Kneedle variants disagree by
+  ~9x (WITH) and ~10x (WITHOUT), and the log10 knee is weaker WITHOUT Port
+  (0.218 vs 0.271). The WITHOUT-Port curve is also LESS stable under the
+  label-free perturbations: trimming the top 1% sends the log10 knee to the 1e-6 floor (eps=1e-06;
+  other perturbations 2.55-3.67). Cause: removing Destination Port makes 2,872 rows
+  feature-identical (WITH Port: 0), giving 1,205 zero k-distances that the Phase 2B
+  procedure floors at 1e-6; this flat block can dominate the normalised log curve. The full-curve
+  eps (3.100) used here is unaffected by that perturbation, but it is less robust than the
+  WITH-Port eps. No clean elbow is claimed.
+
+8. DBSCAN WITHOUT PORT — RESULTS
+  Clusters 44 | noise 1,148 (2.30%) | largest cluster 36,916 (73.8%) | next: [4602, 1943, 1852, 866, 544]
+  Runtime 24.4 s | neighbour pairs 382,010,110 (~9.2 GB est.) | process peak 9.3 GB working set, 12.8 GB committed
+  TP=101 TN=40,618 FP=1,047 FN=8,234
+  Accuracy 0.8144 | Precision 0.0880 | Recall 0.0121 | F1 0.0213 | FPR 0.0251 | FNR 0.9879 | ROC-AUC not reported (binary noise output)
+  Transductive: these metrics describe the noise assignment of these 50,000 rows only.
+
+9. DBSCAN ABLATION COMPARISON (paired: same 50,000 rows)
+                   WITH Port  WITHOUT Port           delta
+  Features                70            69              -1
+  eps                 2.5522        3.0996         +0.5473
+  min_samples             10            10              +0
+  Clusters                56            44             -12
+  Noise %               3.22          2.30        -0.93 pp
+  Precision           0.1061        0.0880  -0.0181 (-1.81 pp)
+  Recall              0.0205        0.0121  -0.0084 (-0.84 pp)
+  F1                  0.0344        0.0213  -0.0131 (-1.31 pp)
+  FPR                 0.0346        0.0251  -0.0095 (-0.95 pp)
+  FNR                 0.9795        0.9879  +0.0084 (+0.84 pp)
+  Runtime (s)           15.5          24.4   (separate runs)
+  Noise sets: WITH 1,612 | WITHOUT 1,148 | both 1,148 | WITH only 464 | WITHOUT only 0
+  Jaccard 0.712; rows whose noise/non-noise assignment changed: 464 (70 ATTACK, 394 BENIGN)
+  Every WITHOUT-Port noise row was also noise WITH Port (the WITHOUT-Port noise set is a strict
+  subset): removing the feature only absorbed former noise rows into clusters.
+  Note: this paired comparison combines two changes — the feature removal and the re-selected eps
+  (2.552 -> 3.100); the two effects are not separated here.
+
+10. DBSCAN — PERCENTAGE FLAGGED AS ANOMALOUS BY CATEGORY (same 50k sample)
+  Category                          n   WITH %    W/O %    change  note
+  DoS Hulk                      3,414     0.97     0.79    -0.18pp  
+  DDoS                          2,441     1.31     0.16    -1.15pp  
+  PortScan                      1,830     0.49     0.11    -0.38pp  
+  DoS GoldenEye                   190    23.68    11.05   -12.63pp  notable
+  DoS slowloris                   123    14.63    13.82    -0.81pp  
+  FTP-Patator                     105     0.00     0.00    +0.00pp  
+  DoS Slowhttptest                 86    33.72    29.07    -4.65pp  
+  SSH-Patator                      63     0.00     0.00    +0.00pp  
+  Web Attack - Brute Force         38    10.53    10.53    +0.00pp  
+  Bot                              35     2.86     2.86    +0.00pp  
+  Web Attack - XSS                 10     0.00     0.00    +0.00pp  statistically unstable (n < 30)
+  Heartbleed                        0                              Not present in the DBSCAN sample
+  Infiltration                      0                              Not present in the DBSCAN sample
+  Web Attack - Sql Injection        0                              Not present in the DBSCAN sample
+  BENIGN rows flagged: WITH 3.46% | WITHOUT 2.51%
+
+11. DBSCAN CLUSTER COMPOSITION (post-hoc, after clustering; Phase 2B definitions)
+  attack-dominated: >=95% attack rows; mixed: 5-95%; benign-dominated: <=5%.
+  share of attack rows in...          WITH Port  WITHOUT Port
+  attack-dominated clusters               41.0%         39.8%
+  mixed clusters                          56.1%         58.1%
+  benign-dominated clusters                0.8%          0.8%
+  noise                                    2.1%          1.2%
+  number of attack-dominated clusters: WITH 11 | WITHOUT 10
+  WITH Port cluster 0 (n=36,489, 12.3% attack): {'BENIGN': 32014, 'DDoS': 1847, 'PortScan': 1811, 'DoS Hulk': 443, 'DoS GoldenEye': 144}
+  WITH Port cluster 5 (n=4,568, 0.7% attack): {'BENIGN': 4537, 'Bot': 14, 'SSH-Patator': 8, 'DoS Slowhttptest': 3, 'Web Attack - Brute Force': 2}
+  WITH Port cluster 1 (n=1,933, 100.0% attack): {'DoS Hulk': 1766, 'DDoS': 167}
+  WITHOUT Port cluster 0 (n=36,916, 12.5% attack): {'BENIGN': 32291, 'DDoS': 1974, 'PortScan': 1817, 'DoS Hulk': 453, 'DoS GoldenEye': 151}
+  WITHOUT Port cluster 6 (n=4,602, 0.7% attack): {'BENIGN': 4568, 'Bot': 14, 'SSH-Patator': 8, 'DoS Slowhttptest': 6, 'Web Attack - Brute Force': 2}
+  WITHOUT Port cluster 1 (n=1,943, 100.0% attack): {'DoS Hulk': 1767, 'DDoS': 176}
+
+12. INTERPRETATION (neutral; no configuration is a 'winner')
+  Q1 Isolation Forest: Removing Destination Port changed Isolation Forest's scores and/or metrics beyond the pre-declared threshold (|delta| >= 0.01 or Pearson < 0.99): ROC-AUC +0.0058, recall -1.13 pp, FPR +0.48 pp, Pearson 0.997, 12,197 predictions changed.
+  Q2 DBSCAN density structure: the selected eps moved 2.552 -> 3.100, clusters 56 -> 44, largest cluster 36,489 -> 36,916; attack rows in attack-dominated clusters 41.0% -> 39.8%, in mixed clusters 56.1% -> 58.1%.
+  Q3 DBSCAN noise membership: the noise sets are partially different (Jaccard 0.712); 464 of 50,000 rows changed noise/non-noise assignment.
+  Q4 Category-level: changes of >= 5 pp (stable-n categories only) — Isolation Forest: DoS GoldenEye 49.1%->60.2%; DBSCAN: DoS GoldenEye 23.7%->11.1%.
+  Q5 Interpretation of the DBSCAN/Isolation Forest difference: in both feature spaces the
+  majority of DBSCAN attack rows sit inside clusters rather than in noise (1.2% noise without Port vs 2.1% with), so the Phase 2B observation that most attack
+  rows occur in dense regions persists after removing Destination Port. This is a description of the ablation only;
+  the formal DBSCAN-vs-Isolation-Forest comparison is deferred.
+
+13. LIMITATIONS
+  * One feature removed, one configuration per algorithm; IF uses one random seed (random_state=42) — with a
+    different feature count the trees draw different splits, so part of any IF change is seed variation.
+  * DBSCAN is transductive and evaluated on a 50k sample; eps had to be re-selected, so the DBSCAN
+    comparison combines the feature change with the change in the unsupervised eps.
+  * The k-distance elbow is ambiguous in both feature spaces; noise sets are sensitive to eps (Phase 2B).
+  * The Phase 2B log10 rule floors zero k-distances at 1e-6; without Port, feature-identical rows make
+    the rule unstable under trimming (Section 7). The procedure was kept unchanged for comparability.
+  * Rare categories (Heartbleed, Infiltration, SQL Injection, XSS) give unstable or no estimates.
+  * Timing comparisons come from separate runs on a shared machine.
+
+14. REPRODUCIBILITY
+  scripts/phase2c.py | random_state=42 | sklearn 1.9.1, numpy 2.5.1, pandas 3.0.5
+  Frozen manifests verified before/after (SHA-256 of the manifests themselves recorded in phase2c_config.json).
+  Total time 1.8 min | process peak working set 9.3 GB, committed 12.8 GB
+
+SANITY CHECKS
+  [PASS] 1. frozen Phase 2A hashes verified before
+  [PASS] 2. frozen Phase 2B hashes verified before
+  [PASS] 3. exactly 70 features WITH Port
+  [PASS] 4. exactly 69 features WITHOUT Port
+  [PASS] 5. Destination Port is the only removed feature
+  [PASS] 6. IF uses the exact frozen train/test rows
+  [PASS] 7. DBSCAN uses the exact frozen 50k sample IDs
+  [PASS] 8. IF training contains only BENIGN
+  [PASS] 9. DBSCAN labels hidden during clustering
+  [PASS] 10. DBSCAN eps selection used no labels (selection precedes reveal)
+  [PASS] 11. no NaN in model input
+  [PASS] 12. no inf in model input
+  [PASS] 13. IF n_estimators=200, contamination='auto', random_state=42
+  [PASS] 14. DBSCAN noise mapping (-1 -> 1, else 0)
+  [PASS] 15. evaluation only after prediction/clustering
+  [PASS] 16. frozen Phase 2A unchanged after
+  [PASS] 17. frozen Phase 2B unchanged after
+
+PHASE 2C COMPLETE — awaiting review. (No final comparison, ensemble, or optimisation.)

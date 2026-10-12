@@ -1,0 +1,7 @@
+Aspect,Isolation Forest,DBSCAN
+Rows processed,"fit 1,467,538; score 1,054,824","50,000 (clustered once per configuration)"
+Fit / cluster time,0.95 s (200 trees x 256 rows),15.5 s primary; PCA runs 20.2-20.6 s
+Prediction,"5.33 s for 1,054,824 unseen rows",no predict(); labels exist only for clustered rows
+Dominant memory cost,data loading (peak 5.9 GB process),"neighbour storage: 320,310,172 pairs (~7.7 GB est.)"
+Scaling limit observed,none reached,100k rows needed ~29.3 GB (> 10 GB budget); 1.5x eps runs skipped
+Saved model size,"0.36 MB (frozen 200-tree pickle, compressed)",n/a (cluster labels for the sample)

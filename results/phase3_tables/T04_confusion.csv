@@ -1,0 +1,3 @@
+Algorithm,Population,TN,FP,FN,TP
+Isolation Forest,"1,054,824 test rows",581525,47421,179318,246560
+DBSCAN,"50,000 sample rows",40224,1441,8164,171

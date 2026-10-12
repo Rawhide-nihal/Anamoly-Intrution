@@ -1,0 +1,15 @@
+Attack category,IF n,IF % flagged as anomalous,IF note,DBSCAN n,DBSCAN % flagged as anomalous,DBSCAN note
+DoS Hulk,172849,89.28,,3414,0.97,
+DDoS,128016,62.03,,2441,1.31,
+PortScan,90819,0.24,,1830,0.49,
+DoS GoldenEye,10286,49.12,,190,23.68,
+DoS slowloris,5385,57.72,,123,14.63,
+DoS Slowhttptest,5228,82.06,,86,33.72,
+FTP-Patator,5933,0.0,,105,0.0,
+SSH-Patator,3219,0.0,,63,0.0,
+Bot,1953,2.25,,35,2.86,
+Web Attack - Brute Force,1470,4.97,,38,10.53,
+Web Attack - XSS,652,2.45,,10,0.0,statistically unstable (n<30)
+Infiltration,36,83.33,small n (<100): unstable,Not present,Not present,
+Web Attack - Sql Injection,21,0.0,small n (<100): unstable,Not present,Not present,
+Heartbleed,11,100.0,small n (<100): unstable,Not present,Not present,

@@ -1,0 +1,355 @@
+{
+  "mandatory_statement": "Isolation Forest was evaluated on an unseen test population after being trained exclusively on BENIGN traffic, whereas DBSCAN was evaluated transductively on a representative mixed sample. Therefore, their raw metric values should be interpreted within their respective experimental designs rather than as a direct apples-to-apples benchmark.",
+  "populations": {
+    "isolation_forest": {
+      "train_benign": 1467538,
+      "test": 1054824,
+      "test_benign": 628946,
+      "test_attack": 425878
+    },
+    "dbscan": {
+      "sample": 50000,
+      "benign": 41665,
+      "attack": 8335,
+      "composition": {
+        "BENIGN": 41665,
+        "DoS Hulk": 3414,
+        "DDoS": 2441,
+        "PortScan": 1830,
+        "DoS GoldenEye": 190,
+        "DoS slowloris": 123,
+        "FTP-Patator": 105,
+        "DoS Slowhttptest": 86,
+        "SSH-Patator": 63,
+        "Web Attack - Brute Force": 38,
+        "Bot": 35,
+        "Web Attack - XSS": 10
+      }
+    }
+  },
+  "isolation_forest_primary": {
+    "config": {
+      "n_estimators": 200,
+      "max_samples": "auto",
+      "contamination": "auto",
+      "random_state": 42,
+      "n_jobs": -1
+    },
+    "metrics": {
+      "TN": 581525,
+      "FP": 47421,
+      "FN": 179318,
+      "TP": 246560,
+      "accuracy": 0.7850456569057966,
+      "precision": 0.8386936570730762,
+      "recall": 0.5789451439144544,
+      "f1": 0.6850230392340723,
+      "fpr": 0.07539756990266255,
+      "fnr": 0.4210548560855456,
+      "anomaly_pct": 27.870147057708206,
+      "roc_auc": 0.8081774225919796
+    },
+    "train_time_s": 0.9507434368133545,
+    "predict_time_s": 5.327650785446167,
+    "peak_ram_gb": 5.864173568
+  },
+  "dbscan_primary": {
+    "eps": 2.552247135571616,
+    "min_samples": 10,
+    "metrics": {
+      "TP": 171,
+      "TN": 40224,
+      "FP": 1441,
+      "FN": 8164,
+      "accuracy": 0.8079,
+      "precision": 0.10607940446650124,
+      "recall": 0.020515896820635874,
+      "f1": 0.03438222579672263,
+      "fpr": 0.03458538341533662,
+      "fnr": 0.9794841031793641
+    },
+    "n_clusters": 56,
+    "noise_pct": 3.2239999999999998,
+    "runtime_s": 15.5377516746521,
+    "pairs": 320310172,
+    "cluster_composition_posthoc": {
+      "attack_rows": 8335,
+      "pct_attack_in_attack_dominated": 41.04379124175165,
+      "n_attack_dominated_clusters": 11,
+      "pct_attack_in_mixed": 56.100779844031194,
+      "n_mixed_clusters": 4,
+      "pct_attack_in_benign_dominated": 0.8038392321535693,
+      "pct_attack_in_noise": 2.0515896820635873,
+      "major_clusters": [
+        {
+          "cluster": 0,
+          "size": 36489,
+          "attack_share_pct": 12.26396996355066,
+          "top_labels": {
+            "BENIGN": 32014,
+            "DDoS": 1847,
+            "PortScan": 1811,
+            "DoS Hulk": 443,
+            "DoS GoldenEye": 144
+          }
+        },
+        {
+          "cluster": 5,
+          "size": 4568,
+          "attack_share_pct": 0.6786339754816112,
+          "top_labels": {
+            "BENIGN": 4537,
+            "Bot": 14,
+            "SSH-Patator": 8,
+            "DoS Slowhttptest": 3,
+            "Web Attack - Brute Force": 2
+          }
+        },
+        {
+          "cluster": 1,
+          "size": 1933,
+          "attack_share_pct": 100.0,
+          "top_labels": {
+            "DoS Hulk": 1766,
+            "DDoS": 167
+          }
+        }
+      ]
+    }
+  },
+  "attack_categories": [
+    {
+      "Attack category": "DoS Hulk",
+      "IF n": 172849,
+      "IF % flagged as anomalous": 89.28,
+      "IF note": "",
+      "DBSCAN n": 3414,
+      "DBSCAN % flagged as anomalous": 0.97,
+      "DBSCAN note": ""
+    },
+    {
+      "Attack category": "DDoS",
+      "IF n": 128016,
+      "IF % flagged as anomalous": 62.03,
+      "IF note": "",
+      "DBSCAN n": 2441,
+      "DBSCAN % flagged as anomalous": 1.31,
+      "DBSCAN note": ""
+    },
+    {
+      "Attack category": "PortScan",
+      "IF n": 90819,
+      "IF % flagged as anomalous": 0.24,
+      "IF note": "",
+      "DBSCAN n": 1830,
+      "DBSCAN % flagged as anomalous": 0.49,
+      "DBSCAN note": ""
+    },
+    {
+      "Attack category": "DoS GoldenEye",
+      "IF n": 10286,
+      "IF % flagged as anomalous": 49.12,
+      "IF note": "",
+      "DBSCAN n": 190,
+      "DBSCAN % flagged as anomalous": 23.68,
+      "DBSCAN note": ""
+    },
+    {
+      "Attack category": "DoS slowloris",
+      "IF n": 5385,
+      "IF % flagged as anomalous": 57.72,
+      "IF note": "",
+      "DBSCAN n": 123,
+      "DBSCAN % flagged as anomalous": 14.63,
+      "DBSCAN note": ""
+    },
+    {
+      "Attack category": "DoS Slowhttptest",
+      "IF n": 5228,
+      "IF % flagged as anomalous": 82.06,
+      "IF note": "",
+      "DBSCAN n": 86,
+      "DBSCAN % flagged as anomalous": 33.72,
+      "DBSCAN note": ""
+    },
+    {
+      "Attack category": "FTP-Patator",
+      "IF n": 5933,
+      "IF % flagged as anomalous": 0.0,
+      "IF note": "",
+      "DBSCAN n": 105,
+      "DBSCAN % flagged as anomalous": 0.0,
+      "DBSCAN note": ""
+    },
+    {
+      "Attack category": "SSH-Patator",
+      "IF n": 3219,
+      "IF % flagged as anomalous": 0.0,
+      "IF note": "",
+      "DBSCAN n": 63,
+      "DBSCAN % flagged as anomalous": 0.0,
+      "DBSCAN note": ""
+    },
+    {
+      "Attack category": "Bot",
+      "IF n": 1953,
+      "IF % flagged as anomalous": 2.25,
+      "IF note": "",
+      "DBSCAN n": 35,
+      "DBSCAN % flagged as anomalous": 2.86,
+      "DBSCAN note": ""
+    },
+    {
+      "Attack category": "Web Attack - Brute Force",
+      "IF n": 1470,
+      "IF % flagged as anomalous": 4.97,
+      "IF note": "",
+      "DBSCAN n": 38,
+      "DBSCAN % flagged as anomalous": 10.53,
+      "DBSCAN note": ""
+    },
+    {
+      "Attack category": "Web Attack - XSS",
+      "IF n": 652,
+      "IF % flagged as anomalous": 2.45,
+      "IF note": "",
+      "DBSCAN n": 10,
+      "DBSCAN % flagged as anomalous": 0.0,
+      "DBSCAN note": "statistically unstable (n<30)"
+    },
+    {
+      "Attack category": "Infiltration",
+      "IF n": 36,
+      "IF % flagged as anomalous": 83.33,
+      "IF note": "small n (<100): unstable",
+      "DBSCAN n": "Not present",
+      "DBSCAN % flagged as anomalous": "Not present",
+      "DBSCAN note": ""
+    },
+    {
+      "Attack category": "Web Attack - Sql Injection",
+      "IF n": 21,
+      "IF % flagged as anomalous": 0.0,
+      "IF note": "small n (<100): unstable",
+      "DBSCAN n": "Not present",
+      "DBSCAN % flagged as anomalous": "Not present",
+      "DBSCAN note": ""
+    },
+    {
+      "Attack category": "Heartbleed",
+      "IF n": 11,
+      "IF % flagged as anomalous": 100.0,
+      "IF note": "small n (<100): unstable",
+      "DBSCAN n": "Not present",
+      "DBSCAN % flagged as anomalous": "Not present",
+      "DBSCAN note": ""
+    }
+  ],
+  "port_ablation": {
+    "isolation_forest": {
+      "precision": -0.011374140003511224,
+      "recall": -0.011280225792363097,
+      "f1": -0.011696148882669788,
+      "fpr": 0.004831893358094336,
+      "fnr": 0.011280225792363097,
+      "roc_auc": 0.0057956141332593525
+    },
+    "if_pearson": 0.9972506169794062,
+    "if_agreement": 0.9884369335547921,
+    "dbscan": {
+      "precision": -0.01810031038984619,
+      "recall": -0.008398320335932815,
+      "f1": -0.013080949829201802,
+      "fpr": -0.00945637825513021,
+      "fnr": 0.008398320335932907
+    },
+    "dbscan_eps_without": 3.0995949588043126,
+    "dbscan_noise_overlap": {
+      "noise_with": 1612,
+      "noise_without": 1148,
+      "both": 1148,
+      "with_only": 464,
+      "without_only": 0,
+      "jaccard": 0.7121588089330024,
+      "changed_assignment": 464,
+      "changed_attack": 70,
+      "changed_benign": 394
+    },
+    "duplicate_rows_without_port": 2872
+  },
+  "pca": [
+    {
+      "Space": "Standardized (no PCA)",
+      "Components": 70,
+      "Cum. variance": 1.0,
+      "eps": 2.552,
+      "Clusters": 56,
+      "Noise %": 3.22,
+      "Precision": 0.1061,
+      "Recall": 0.0205,
+      "F1": 0.0344,
+      "Runtime s": 15.5
+    },
+    {
+      "Space": "PCA 90%",
+      "Components": 19,
+      "Cum. variance": 0.904,
+      "eps": 1.683,
+      "Clusters": 52,
+      "Noise %": 3.7,
+      "Precision": 0.1315,
+      "Recall": 0.0292,
+      "F1": 0.0477,
+      "Runtime s": 20.2
+    },
+    {
+      "Space": "PCA 95%",
+      "Components": 23,
+      "Cum. variance": 0.9509,
+      "eps": 1.813,
+      "Clusters": 52,
+      "Noise %": 3.73,
+      "Precision": 0.1223,
+      "Recall": 0.0274,
+      "F1": 0.0447,
+      "Runtime s": 20.6
+    },
+    {
+      "Space": "PCA 99%",
+      "Components": 31,
+      "Cum. variance": 0.9908,
+      "eps": 2.402,
+      "Clusters": 58,
+      "Noise %": 3.15,
+      "Precision": 0.1036,
+      "Recall": 0.0196,
+      "F1": 0.0329,
+      "Runtime s": 20.3
+    }
+  ],
+  "sensitivity_ranges": {
+    "noise_pct": [
+      1.55,
+      11.004
+    ],
+    "jaccard": [
+      0.2929843693202472,
+      0.7368421052631579
+    ]
+  },
+  "no_ranking": true,
+  "no_models_rerun": true,
+  "source_artifact_sha256": {
+    "results/phase2a_metrics.json": "fce9acb54eadeeac4eac6646e54b91979c276cf2ab3032f1b40fa9f9ca9f6866",
+    "results/if_test_outputs.npz": "3b502eedd322fbb39cdc2d313669b1554d3aca7f33e6c50c82d9ae5cab008775",
+    "results/phase2b_metrics.json": "8089f07e74072d6baa6128286e2ea36f0fbedbd3039dc46b04519262158ed1f2",
+    "results/phase2b_config.json": "0aabbaceeff0c4c32e03057fa7514a63028f65771a3bd1c6ee148e4b279a9007",
+    "results/phase2c_metrics.json": "ee15dea3ef9e00e06117aa4a9ccf2d3a1c723872bb48ddc92327bed412be5c09",
+    "results/phase2c_config.json": "d35e3ad9478086a0df279d2e8ebdb826533f15f8d94359b959b705a13be0e1c7"
+  },
+  "frozen_manifest_sha256": {
+    "2A": "6a0fa67c7c7a2c75e17bb73502b7829a5ba98ccf2bd33d14f1bc9ece6855ca5d",
+    "2B": "8ca80daf2567cc869a950bbbc02f6671314f509f5e2435ea6e99b6379d992a9d",
+    "2C": "8ab1e3a9578654f6a008707f7ad6b96dd990c9a0ed2da21b676a3af7ac99f5f8"
+  }
+}

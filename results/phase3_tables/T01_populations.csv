@@ -1,0 +1,8 @@
+Item,Isolation Forest,DBSCAN
+Deduplicated population,"2,522,362 rows","2,522,362 rows"
+Rows used to fit,"1,467,538 BENIGN (TRAIN)","50,000 mixed rows (labels hidden)"
+Rows evaluated,"1,054,824 unseen TEST rows","the same 50,000 rows (transductive)"
+BENIGN evaluated,"628,946","41,665"
+ATTACK evaluated,"425,878","8,335"
+Attack prevalence,40.37%,16.67%
+Selection,seeded 70/30 permutation of BENIGN + all attacks,"uniform random sample, random_state=42 (50k fallback of 100k draw: memory)"

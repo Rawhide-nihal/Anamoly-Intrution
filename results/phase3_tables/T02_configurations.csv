@@ -1,0 +1,7 @@
+Setting,Isolation Forest,DBSCAN
+Algorithm,sklearn IsolationForest,"sklearn DBSCAN (Euclidean, brute)"
+Features,70 (Destination Port retained),70 (Destination Port retained)
+Preprocessing,"inf->NaN, median impute, StandardScaler (fit on BENIGN TRAIN)","inf->NaN, median impute, StandardScaler (fit on the 50k sample)"
+Key parameters,"n_estimators=200, max_samples='auto' (256), contamination='auto', random_state=42","eps=2.552, min_samples=10"
+How parameters were set,pre-specified baseline,log10-Kneedle on k-distance curve; min_samples closest to ln(n); no labels
+Anomaly decision,-decision_function > 0,cluster label == -1 (noise)

@@ -1,0 +1,57 @@
+ZERO-VARIANCE RECONCILIATION
+==============================================================================
+EDA sample (5,000 rows x 8 files = 40,000)     constant columns: 10
+Full raw data (2,830,743 rows)                 constant columns: 8
+Deduplicated data                              constant columns: 8
+Approved TRAIN (1,467,538 BENIGN)              constant columns: 8
+TEST (1,054,824)                               constant columns: 8
+Phase 1/2A rule: X_train.var() == 0            constant columns: 8
+
+Per-file constant counts (audit.py / audit_results.json):
+  Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv              10
+  Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv          10
+  Friday-WorkingHours-Morning.pcap_ISCX.csv                     10
+  Monday-WorkingHours.pcap_ISCX.csv                             10
+  Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv   8
+  Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv        10
+  Tuesday-WorkingHours.pcap_ISCX.csv                            10
+  Wednesday-workingHours.pcap_ISCX.csv                          10
+
+Constant in EVERY scope (8): ['Bwd Avg Bulk Rate', 'Bwd Avg Bytes/Bulk', 'Bwd Avg Packets/Bulk', 'Bwd PSH Flags', 'Bwd URG Flags', 'Fwd Avg Bulk Rate', 'Fwd Avg Bytes/Bulk', 'Fwd Avg Packets/Bulk']
+Disputed columns: ['CWE Flag Count', 'Fwd URG Flags']
+
+--- CWE Flag Count ---
+  EDA sample (5,000 rows x 8 files = 40,000)     non-zero rows:      0   distinct values: [0]
+  Full raw data (2,830,743 rows)                 non-zero rows:    315   distinct values: [0, 1]
+  Deduplicated data                              non-zero rows:     80   distinct values: [0, 1]
+  Approved TRAIN (1,467,538 BENIGN)              non-zero rows:     56   distinct values: [0, 1]
+  TEST (1,054,824)                               non-zero rows:     24   distinct values: [0, 1]
+  constant in Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.: True
+  constant in Friday-WorkingHours-Afternoon-PortScan.pcap_I: True
+  constant in Friday-WorkingHours-Morning.pcap_ISCX.csv    : True
+  constant in Monday-WorkingHours.pcap_ISCX.csv            : True
+  constant in Thursday-WorkingHours-Afternoon-Infilteration: False
+  constant in Thursday-WorkingHours-Morning-WebAttacks.pcap: True
+  constant in Tuesday-WorkingHours.pcap_ISCX.csv           : True
+  constant in Wednesday-workingHours.pcap_ISCX.csv         : True
+  TEST non-zero rows by Label: {'BENIGN': 24}
+  TRAIN variance: 3.816e-05
+
+--- Fwd URG Flags ---
+  EDA sample (5,000 rows x 8 files = 40,000)     non-zero rows:      0   distinct values: [0]
+  Full raw data (2,830,743 rows)                 non-zero rows:    315   distinct values: [0, 1]
+  Deduplicated data                              non-zero rows:     80   distinct values: [0, 1]
+  Approved TRAIN (1,467,538 BENIGN)              non-zero rows:     56   distinct values: [0, 1]
+  TEST (1,054,824)                               non-zero rows:     24   distinct values: [0, 1]
+  constant in Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.: True
+  constant in Friday-WorkingHours-Afternoon-PortScan.pcap_I: True
+  constant in Friday-WorkingHours-Morning.pcap_ISCX.csv    : True
+  constant in Monday-WorkingHours.pcap_ISCX.csv            : True
+  constant in Thursday-WorkingHours-Afternoon-Infilteration: False
+  constant in Thursday-WorkingHours-Morning-WebAttacks.pcap: True
+  constant in Tuesday-WorkingHours.pcap_ISCX.csv           : True
+  constant in Wednesday-workingHours.pcap_ISCX.csv         : True
+  TEST non-zero rows by Label: {'BENIGN': 24}
+  TRAIN variance: 3.816e-05
+
+Fwd URG Flags identical to CWE Flag Count on every deduplicated row: True

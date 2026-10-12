@@ -1,0 +1,2 @@
+# Keep every file byte-for-byte: the SHA-256 manifests in results/ depend on exact bytes.
+* -text

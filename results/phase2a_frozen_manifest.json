@@ -1,0 +1,57 @@
+{
+  "phase": "2A",
+  "status": "FROZEN",
+  "frozen_at": "2026-10-02 11:23:13",
+  "primary_model": {
+    "n_estimators": 200,
+    "max_samples": "auto",
+    "contamination": "auto",
+    "random_state": 42
+  },
+  "split": {
+    "train": 1467538,
+    "test": 1054824,
+    "test_benign": 628946,
+    "test_attack": 425878,
+    "method": "glob order -> drop_duplicates -> np.random.seed(42) permutation, first 70% of BENIGN = TRAIN"
+  },
+  "n_features": 70,
+  "zero_variance_dropped": [
+    "Bwd PSH Flags",
+    "Bwd URG Flags",
+    "Fwd Avg Bytes/Bulk",
+    "Fwd Avg Packets/Bulk",
+    "Fwd Avg Bulk Rate",
+    "Bwd Avg Bytes/Bulk",
+    "Bwd Avg Packets/Bulk",
+    "Bwd Avg Bulk Rate"
+  ],
+  "headline": {
+    "TP": 246560,
+    "TN": 581525,
+    "FP": 47421,
+    "FN": 179318,
+    "precision": 0.8386936570730762,
+    "recall": 0.5789451439144544,
+    "f1": 0.6850230392340723,
+    "fpr": 0.07539756990266255,
+    "fnr": 0.4210548560855456,
+    "roc_auc": 0.8081774225919796
+  },
+  "sha256": {
+    "models/isolation_forest.pkl": "a154f6d19e52bc8af81e1f01311a1ce62b4c8fd4e9de1f6e8f4b03756a0f93b5",
+    "models/imputer.pkl": "53c12606d1b366d81132501de6dcce4aac83709a87eed2811c3a4e633c628f06",
+    "models/scaler.pkl": "065de5bbedbc0d7c5ecc763a13cdc110f0810d0d210fb5d6c299f2c39bd881b9",
+    "models/preprocessing_meta.pkl": "50af1520a6bdcdc26a8f371b247fb1c0f11981139ad3f067999eadef50ee6010",
+    "results/phase2a_report.txt": "ea14c966d3034416827ff901dc66787853e83f59bac99f1ef7ad05ed5f421c7a",
+    "results/phase2a_metrics.json": "fce9acb54eadeeac4eac6646e54b91979c276cf2ab3032f1b40fa9f9ca9f6866",
+    "results/if_test_outputs.npz": "3b502eedd322fbb39cdc2d313669b1554d3aca7f33e6c50c82d9ae5cab008775",
+    "phase2a.py": "ea8880c99018f798ece1cc42afd04fa9388eba6bfd86d67b313a4a4feb3155e0",
+    "plots/phase2a/01_confusion_matrix.png": "4f01f1ff1c761469b7c5a32e2a1aabf79cc10dbe43a859cbdbfa52e66b947aee",
+    "plots/phase2a/02_anomaly_score_distribution.png": "8902d6c65df3831f85995b889c34e8005191c3b34b5caa8379c0febf76d0d125",
+    "plots/phase2a/03_roc_curve.png": "6a430983f790f551bb3407e31b3b7d603862a908b116faa5af7b99889a972b25",
+    "plots/phase2a/04_prediction_distribution.png": "f3478016ab888343136c80dbf692177d6cbdeeff11c9bea3fb8d3528c0e49a99",
+    "plots/phase2a/05_attack_category_flag_rate.png": "f0a2d0f838662ac7b5dc910a5cef25df6e2c2a473d9013102e2e4c8d6ee17b6f",
+    "plots/phase2a/06_contamination_sensitivity.png": "92a2cb53cc230019d2dfcd4069ac29c016efb3afdc07c01de439d77a513816f9"
+  }
+}
